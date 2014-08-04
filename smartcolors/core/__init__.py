@@ -12,6 +12,63 @@
 from bitcoin.core import COutPoint, CTransaction
 from bitcoin.core.script import CScript
 
+
+def remove_msbdrop_value_padding(padded_nValue):
+    """Remove MSB-Drop nValue padding
+
+    Returns unpadded nValue
+    """
+    if padded_nValue & 0b1 == 0:
+        # MSB padding was not used
+        return padded_nValue >> 1
+
+    elif padded_nValue & 0b1 == 1:
+        # Test against increasingly smaller msb_masks until we find the MSB set
+        # to 1
+        for i in range(63, 0, -1):
+            msb_mask = 1 << i
+            if msb_mask & padded_nValue:
+                return (padded_nValue & ~msb_mask) >> 1
+
+        # Degenerate case: padded_nValue == 0b1 and unpadded value == 0
+        assert padded_nValue >> 1 == 0
+        return 0
+
+    else:
+        raise TypeError('LSB of padded nValue is neither 1 nor 0')
+
+
+# Note that this function is *not* consensus critical; maybe should be moved
+# elsewhere?
+def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue):
+    """Pad a nValue using MSB-Drop method
+
+    minimum_nValue - minimum allowed nValue
+
+    Returns padded nValue
+    """
+    if not (0 <= minimum_nValue <= 2**64-1):
+        raise ValueError("Minimum nValue out of range")
+
+    # Technically this range could be larger, but then "needs padding" and
+    # "doesn't need padding" cases would have to be handled separately
+    if not (0 <= unpadded_nValue <= 2**62-1):
+        raise ValueError("Unpadded nValue out of range")
+
+    if (unpadded_nValue << 1) >= minimum_nValue:
+        # No padded needed!
+        return unpadded_nValue << 1
+
+    else:
+        i = 0
+        while (1 << i) <  (unpadded_nValue << 1) | 0b1:
+            i += 1
+        while (1 << i) | (unpadded_nValue << 1) | 0b1 < minimum_nValue:
+            i += 1
+
+        return (1 << i) | (unpadded_nValue << 1) | 0b1
+
+
 class ColoredOutPoint(COutPoint):
     """An outpoint with color info"""
 

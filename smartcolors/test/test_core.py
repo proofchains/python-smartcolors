@@ -125,3 +125,12 @@ class Test_MSB_Drop_padding(unittest.TestCase):
             0b1111)
         T(  0b100, 0b1111,
            0b11001)
+
+class Test_ColorDefHeader_kernel(unittest.TestCase):
+    def test_no_colored_inputs(self):
+        """Degenerate case of no colored inputs"""
+
+        tx = CTransaction()
+        r = ColorDefHeader.apply_kernel(tx, ())
+        self.assertEqual(r, [])
+

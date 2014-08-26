@@ -9,6 +9,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import bitcoin.core.serialize
+
 from bitcoin.core import COutPoint, CTransaction
 from bitcoin.core.script import CScript
 
@@ -96,7 +98,7 @@ class scriptPubKeyGenesisPointDef:
     max_height = int # maximum block height the scriptPubKey is valid for
 
 
-class ColorDefHeader:
+class ColorDefHeader(bitcoin.core.serialize.ImmutableSerializable):
     """Header for the low-level definition of a color
 
     The header commits to all valid genesis points for this color in a merkle
@@ -116,12 +118,15 @@ class ColorDefHeader:
     # they can't lie about. (modulo scriptPubKey-issuance that is)
     genesis_point_merkle_root = 'uint256'
 
-    def apply_kernel(self, tx, colored_outpoints_in):
+    @staticmethod
+    def apply_kernel(tx, colored_outpoints_in):
         """Apply the color kernel to a given transaction
 
         colored_outpoints_in - ColorOutPoints for tx.vin
 
-        Returns the new colored outpoints created by tx
+        Returns the new colored outpoints created by tx from colored inputs.
+        Note that apply_kernel() does *not* check if tx creates new genesis
+        txouts.
         """
 
         amounts_out = [0] * len(tx.vout)
@@ -147,18 +152,7 @@ class ColorDefHeader:
 
         # return nSequence marked outputs
 
-
-class AnnotatedColorDefHeader(ColorDefHeader):
-    """Metadata bullshit goes here
-
-    Actually, this stuff isn't consensus critical, so it'd go in another
-    module.
-    """
-    company_name = 'blah blah blah'
-    url = 'https://scam.coin'
-    ceo = 'Yo Dawg'
-    age_of_ceo = 16
-    astrological_sign = 'cancer'
+        return []
 
 
 class MerkleColorDef(ColorDefHeader):
@@ -184,6 +178,7 @@ class MerkleColorDef(ColorDefHeader):
 
     def create_bloom_filter(self):
         """Return a bloom filter that will match on the genesis_points"""
+
 
 class ColorProof:
     """Proof that one or more outpoint's are a certain color
@@ -225,5 +220,4 @@ class ColorProof:
 
         Use self.addtx() to add the transactions to the proof.
         """
-
 

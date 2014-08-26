@@ -4,7 +4,7 @@ python-smartcolors
 Requirements
 ============
 
-python-bitcoinlib v0.1.1
+python-bitcoinlib v0.2.0
 
 Unit Tests
 ==========

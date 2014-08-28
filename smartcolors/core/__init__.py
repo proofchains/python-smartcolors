@@ -118,41 +118,78 @@ class ColorDefHeader(bitcoin.core.serialize.ImmutableSerializable):
     # they can't lie about. (modulo scriptPubKey-issuance that is)
     genesis_point_merkle_root = 'uint256'
 
-    @staticmethod
-    def apply_kernel(tx, colored_outpoints_in):
-        """Apply the color kernel to a given transaction
+    def calc_color_transferred(self, txin, color_in, tx):
+        """Calculate the color transferred by a specific txin
 
-        colored_outpoints_in - ColorOutPoints for tx.vin
+        txin     - txin (CTxIn)
+        color_in - Amount of color present (int)
+        tx       - Transaction
 
-        Returns the new colored outpoints created by tx from colored inputs.
-        Note that apply_kernel() does *not* check if tx creates new genesis
-        txouts.
+        Returns a list of color out indexed by vout index. Colored outputs are
+        a non-negative int, uncolored outptus are None.
+        """
+        color_out = [None] * len(tx.vout)
+        remaining_color_in = color_in
+
+        # Which outputs the color in is being sent to is specified by
+        # nSequence.
+        for j in range(min(len(tx.vout), 32)):
+            # An output is marked as colored if the corresponding bit
+            # in nSequence is set to one. This is chosen to allow
+            # standard transactions with standard-looking nSquence's to
+            # move color.
+            if (txin.nSequence >> j) & 0b1 == 1:
+                # Mark the output as being colored if it hasn't been
+                # already.
+                if color_out[j] is None:
+                    color_out[j] = 0
+
+                # Color is allocated to outputs "bucket-style", where
+                # each colored input adds to colored outputs until the
+                # output is "full".
+                max_color_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
+                color_transferred = min(remaining_color_in, max_color_out - color_out[j])
+                color_out[j] += color_transferred
+                remaining_color_in -= color_transferred
+
+                assert color_transferred >= 0
+                assert remaining_color_in >= 0
+
+        # Any remaining color that hasn't been sent to an output by the
+        # txin is simply destroyed. This ensures all color transfers
+        # happen explicitly, rather than implicitly, which may be
+        # useful in the future to reduce proof sizes for large
+        # transactions.
+        return color_out
+
+    def apply_kernel(self, tx, color_in):
+        """Apply the color kernel to a transaction
+
+        The kernel only tracks the movement of color from input to output; the
+        creation of genesis txouts is handled separately.
+
+        tx       - The transaction
+        color_in - Color in by txin idx
+
+        Return a list of amount of color out indexed by vout index. Colored
+        outputs are a >= 0 integer, uncolored outputs are None.
         """
 
-        amounts_out = [0] * len(tx.vout)
-        prev_nSequence = None
-        sum_color_in = 0
-        for (i, colored_outpoint_in) in enumerate(colored_outpoints_in):
-            if colored_outpoint_in not in tx.vin:
-                raise Exception
+        color_out = [None] * len(tx.vout)
 
-            # All nSequence mappings must be identical
-            if prev_nSequence is not None:
-                if prev_nSequence != tx.vin[i].nSequence:
-                    raise Exception
-                prev_nSequence = tx.vin[i].nSequence
+        for (i, txin) in enumerate(tx.vin):
+            if color_in[i] is None:
+                # Input not colored
+                continue
 
-            # sum up color in
-            #sum_color_in += <amount in>
+            else:
+                for i, amount in enumerate(self.calc_color_transferred(txin, color_in[i], tx)):
+                    if amount is not None:
+                        if color_out[i] is None:
+                            color_out[i] = 0
+                        color_out[i] += amount
 
-        # sum up color going out
-        #<fixme>
-
-        # if color in != color out we have a problem!
-
-        # return nSequence marked outputs
-
-        return []
+        return color_out
 
 
 class MerkleColorDef(ColorDefHeader):

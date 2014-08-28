@@ -11,6 +11,7 @@
 
 import unittest
 
+from bitcoin.core import *
 from smartcolors.core import *
 
 class Test_MSB_Drop_padding(unittest.TestCase):
@@ -127,10 +128,116 @@ class Test_MSB_Drop_padding(unittest.TestCase):
            0b11001)
 
 class Test_ColorDefHeader_kernel(unittest.TestCase):
+    def make_color_tx(self, input_nsequences, output_amounts):
+        """Make a test transaction"""
+        vin = [CTxIn(nSequence=nSequence) for nSequence in input_nsequences]
+        vout = [CTxOut(add_msbdrop_value_padding(nValue, 0)) for nValue in output_amounts]
+        return CTransaction(vin, vout)
+
     def test_no_colored_inputs(self):
-        """Degenerate case of no colored inputs"""
+        """Degenerate case of no colored inputs or outputs"""
+        hdr = ColorDefHeader()
+        tx = self.make_color_tx([0], [0])
+        color_out = hdr.apply_kernel(tx, (None,))
+        self.assertEqual(color_out, [None])
 
-        tx = CTransaction()
-        r = ColorDefHeader.apply_kernel(tx, ())
-        self.assertEqual(r, [])
+    def test_one_to_one_exact(self):
+        """One colored input to one colored output, color_in == max_out"""
+        hdr = ColorDefHeader()
+        tx = self.make_color_tx([0b1], [1])
+        color_out = hdr.apply_kernel(tx, (1,))
+        self.assertEqual(color_out, [1])
 
+    def test_one_to_one_less_than_max(self):
+        """One colored input to one colored output, color_in < max_out"""
+        hdr = ColorDefHeader()
+        tx = self.make_color_tx([0b1], [10])
+        color_out = hdr.apply_kernel(tx, (1,))
+        self.assertEqual(color_out, [1])
+
+    def test_one_to_one_more_than_max(self):
+        """One colored input to one colored output, color_in > max_out"""
+        hdr = ColorDefHeader()
+        tx = self.make_color_tx([0b1], [1])
+        color_out = hdr.apply_kernel(tx, (2,))
+        self.assertEqual(color_out, [1])
+
+    def test_one_to_two_exact(self):
+        """One colored input to two colored outputs, color_in == max_out"""
+        hdr = ColorDefHeader()
+        tx = self.make_color_tx([0b11], [1, 2])
+        color_out = hdr.apply_kernel(tx, (3,))
+        self.assertEqual(color_out, [1, 2])
+
+    def test_one_to_two_less_than_max(self):
+        """One colored input to two colored outputs, color_in < max_out"""
+        hdr = ColorDefHeader()
+
+        # Exactly enough color in to fill first output but not second
+        tx = self.make_color_tx([0b11], [1, 2])
+        color_out = hdr.apply_kernel(tx, (1,))
+        self.assertEqual(color_out, [1, 0])
+
+        # Enough color in to fill first output and part of second
+        tx = self.make_color_tx([0b11], [1, 3])
+        color_out = hdr.apply_kernel(tx, (3,))
+        self.assertEqual(color_out, [1, 2])
+
+        # Three colored outputs. The result specifies the last output as
+        # colored, but with the amount of color == 0
+        tx = self.make_color_tx([0b111], [1, 3, 4])
+        color_out = hdr.apply_kernel(tx, (3,))
+        self.assertEqual(color_out, [1, 2, 0])
+
+        # As above, but with an uncolored output as well
+        tx = self.make_color_tx([0b1011], [1, 3, 4, 5])
+        color_out = hdr.apply_kernel(tx, (3,))
+        self.assertEqual(color_out, [1, 2, None, 0])
+
+    def test_one_to_two_more_than_max(self):
+        """One colored input to two colored outputs, color_in > max_out"""
+        hdr = ColorDefHeader()
+
+        # Both filled with one left over
+        tx = self.make_color_tx([0b11], [1, 2])
+        color_out = hdr.apply_kernel(tx, (4,))
+        self.assertEqual(color_out, [1, 2])
+
+        # Remaining isn't assigned to uncolored outputs
+        tx = self.make_color_tx([0b11], [1, 2, 3])
+        color_out = hdr.apply_kernel(tx, (4,))
+        self.assertEqual(color_out, [1, 2, None])
+
+    def test_two_to_two_exact(self):
+        """Two colored inputs to two colored outputs, color_in == max_out"""
+        hdr = ColorDefHeader()
+
+        # 1:1 mapping
+        tx = self.make_color_tx([0b01, 0b10], [1, 2])
+        color_out = hdr.apply_kernel(tx, (1,2))
+        self.assertEqual(color_out, [1, 2])
+
+        # Mapping reversed, which means the second input is sending color to
+        # both outputs
+        tx = self.make_color_tx([0b10, 0b11], [1, 2])
+        color_out = hdr.apply_kernel(tx, (1,2))
+        self.assertEqual(color_out, [1, 2])
+
+    def test_two_to_two_color_left_over(self):
+        """Two colored inputs to two colored outputs, color left over but not assigned"""
+        hdr = ColorDefHeader()
+
+        tx = self.make_color_tx([0b10, 0b01], [2, 3, 4])
+        color_out = hdr.apply_kernel(tx, (1,3))
+        self.assertEqual(color_out, [2, 1, None])
+
+    def test_multiple_to_one(self):
+        hdr = ColorDefHeader()
+
+        tx = self.make_color_tx([0b1, 0b1, 0b1, 0b1, 0b1], [1+2+3+4+5])
+        color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
+        self.assertEqual(color_out, [1+2+3+4+5])
+
+        tx = self.make_color_tx([0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
+        color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
+        self.assertEqual(color_out, [1+2+3+4+5, 0])

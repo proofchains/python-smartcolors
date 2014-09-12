@@ -98,25 +98,20 @@ class scriptPubKeyGenesisPointDef:
     max_height = int # maximum block height the scriptPubKey is valid for
 
 
-class ColorDefHeader(bitcoin.core.serialize.ImmutableSerializable):
-    """Header for the low-level definition of a color
+class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
+    """The low-level definition of a color
 
-    The header commits to all valid genesis points for this color in a merkle
-    tree. This lets even very large color definitions be used efficiently by
-    SPV clients.
+    Commits to all valid genesis points for this color in a merkle tree. This
+    lets even very large color definitions be used efficiently by SPV clients.
     """
 
     # Previous version of this color definition
     prev_header_hash = 'uint256'
 
-    # Merkle root of all genesis point definitions valid for this color.
-    #
-    # TODO: should this be a merkle-sum tree instead? Combined with a key we
-    # could have colors definitions where what shares have been issued and to
-    # whome is actually totally private information, yet there is no way for
-    # the issuer to lie about how many shares have been issued is something
-    # they can't lie about. (modulo scriptPubKey-issuance that is)
-    genesis_point_merkle_root = 'uint256'
+
+    def __init__(self, prevdef_hash, genesis_set):
+        self.prevdef_hash = prevdef_hash
+        self.genesis_set = genesis_set
 
     def calc_color_transferred(self, txin, color_in, tx):
         """Calculate the color transferred by a specific txin
@@ -191,30 +186,11 @@ class ColorDefHeader(bitcoin.core.serialize.ImmutableSerializable):
 
         return color_out
 
+    def prune(self, relevant_genesis_outs):
+        pruned_genesis_set = self.genesis_set.prove_contains(relevant_genesis_outs)
 
-class MerkleColorDef(ColorDefHeader):
-    """Full color definition
-
-    Contains actual genesis points, up to and including all of them, as well as
-    whatever parts of the merkle tree are needed to recompute the merkle root.
-
-    Encoding should be such that a MerkleColorDef can prove a single genesis
-    point efficently, removing the need for a MerkleGenesisDef.
-    """
-
-    genesis_points = []
-
-    # will need some scheme similar to CMerkleBlock's - can we avoid the
-    # preimage attack that Satoshi's block hashing algorithm has?
-    #
-    # Should we use a radix tree instead with ordering? Would be useful to be
-    # able to prove that a given outpoint/scriptPubKey was *not* colored,
-    # although note how the key would have to be H(genesispoint.scriptPubKey)
-    # rather than H(genesispoint.serialize())
-    # bits_or_something = dunno yet
-
-    def create_bloom_filter(self):
-        """Return a bloom filter that will match on the genesis_points"""
+        # Note how we allow subclasses to work!
+        return self.__class__(self.prevdef_hash, pruned_genesis_set)
 
 
 class ColorProof:
@@ -225,14 +201,15 @@ class ColorProof:
     blocks/transactions are added/removed.
     """
 
-    # The color definition we're trying to prove
-    # colored = MerkleColorDef
+    def __init__(self, colordef, txs):
+        self.colordef = colordef
 
-    # Transactions in the proof
-    # txs = (CMerkleTx,)
+        self.all_outputs = set()
+        self.unspent_outputs = set()
 
-    # Current proven outputs
-    # outputs = (ColoredOutpoint,)
+        self.txs = []
+        for tx in txs:
+            self.addtx(tx)
 
     def addtx(self, tx):
         """Add a new tx to the proof
@@ -240,11 +217,59 @@ class ColorProof:
         self.outputs will be updated
         """
 
+        new_colored_outs = set()
+
+        # Check each input to determine if it is a genesis point.
+        for txin in tx.vin:
+            prevout = txin.prevout
+
+            try:
+                prevtx = self.txs[prevout.hash]
+            except IndexError:
+                # Can't prove anything without the previous tx, so continue
+                continue
+
+            if (prevout in self.genesis_set # defined directly by COutPoint
+                or prevtx.vout[prevout.n].scriptPubKey in self.genesis_set): # defined by scriptPubKey
+
+                new_colored_out = ColoredOutPoint.from_tx(prevtx, prevout)
+
+                # Add the new colored output to the known and unspent output
+                # sets. The output may in fact already be in these sets as an
+                # output can be colored by fiat by the issuer and
+                # simultaneously be colored by virtue of being a descendent of
+                # a genesis output.
+                self.all_outputs.add(new_colored_out)
+                self.unspent_outputs.add(new_colored_out)
+
+
+        # Apply the kernel.
+        #
+        # FIXME: Consider how addtx() should behave if we apply it to the same
+        # tx twice. If all colored inputs are known and we apply the same
+        # transaction twice the inputs to that transaction will be missing from
+        # the unspent outputs set and the kernel will do nothing; no change.
+        # However if only some colored inputs are known, addtx() is called,
+        # then more colored inputs become known, the second addtx() could end
+        # up adding the same output to the unspent_outputs list twice, with the
+        # second time having a different amount of color.
+        new_outs = self.apply_kernel(tx, self.unspent_outputs)
+
+        self.all_outputs.update(new_outs)
+        self.unspent_outputs.update(new_outs)
+
+        self.unspent_outputs.difference_update([txin.prevout for txin in tx.vin])
+
     def removetx(self, tx):
         """Remove a transaction from the proof
 
         Other transactions may be removed as well
         """
+
+        # FIXME: Fair amount of thought involved in getting this right; easiest
+        # approach would be to just re-addtx() all txs in order for a
+        # ref-implementation to write tests against.
+        raise NotImplementedError
 
     def prove_outputs(self, outputs):
         """Prove a subset of outputs
@@ -252,9 +277,41 @@ class ColorProof:
         Returns a new ColorProof
         """
 
+        genesis_outputs = set()
+        outputs = set(outputs)
+        relevant_txs = insertion_ordered_set()
+
+        while outputs:
+            next_outputs = set()
+
+            for output in outputs:
+                tx = self.txs[output]
+
+                relevant_txs.add(tx)
+
+                for txin in tx:
+                    if txin is a genesis output:
+                        genesis_outputs.add(txin.prevout)
+
+                        # may need to add supporting txs, e.g. for scriptPubKey-based geneis outputs
+
+                    else:
+                        # otherwise keep backtracking
+                        next_outputs.add(txin.prevout)
+
+            outputs = next_outputs
+
+        # We can prune our color def to only include the genesis outputs we
+        # found.
+        pruned_colordef = self.colordef.prune(genesis_outputs)
+
+        # Note how this ensures subclasses work!
+        return self.__class__(pruned_colordef, relevant_txs)
+
     def create_bloom_filter(self):
         """Return a bloom filter that will match on transactions spending colored outputs proven
 
         Use self.addtx() to add the transactions to the proof.
         """
+        raise NotImplementedError
 

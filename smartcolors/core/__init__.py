@@ -109,9 +109,11 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     prev_header_hash = 'uint256'
 
 
-    def __init__(self, prevdef_hash, genesis_set):
-        self.prevdef_hash = prevdef_hash
-        self.genesis_set = genesis_set
+    def __init__(self, prevdef_hash=b'\x00'*32, genesis_set=None):
+        if genesis_set is None:
+            genesis_set = set()
+        object.__setattr__(self, 'prevdef_hash', prevdef_hash)
+        object.__setattr__(self, 'genesis_set', genesis_set)
 
     def calc_color_transferred(self, txin, color_in, tx):
         """Calculate the color transferred by a specific txin
@@ -290,7 +292,7 @@ class ColorProof:
                 relevant_txs.add(tx)
 
                 for txin in tx:
-                    if txin is a genesis output:
+                    if txin is a_genesis_output:
                         genesis_outputs.add(txin.prevout)
 
                         # may need to add supporting txs, e.g. for scriptPubKey-based geneis outputs

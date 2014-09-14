@@ -11,7 +11,7 @@
 
 import smartcolors.core
 
-class AnnotatedColorDefHeader(smartcolors.core.ColorDefHeader):
+class AnnotatedColorDef(smartcolors.core.ColorDef):
     """Metadata bullshit goes here
 
     This stuff isn't consensus critical, so it's kept separate from the

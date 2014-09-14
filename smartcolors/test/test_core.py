@@ -266,3 +266,34 @@ class Test_ColorDef_kernel(unittest.TestCase):
         tx = self.make_color_tx([0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
         color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
         self.assertEqual(color_out, [1+2+3+4+5, 0])
+
+class Test_ColorProof(unittest.TestCase):
+    def test_txout_genesis(self):
+        genesis_tx = CTransaction(vin=(),
+                                  vout=[CTxOut(add_msbdrop_value_padding(1))])
+
+        txout_genesis_point = TxOutGenesisPointDef(COutPoint(genesis_tx.GetHash(), 0))
+
+        cdef = ColorDef([txout_genesis_point])
+
+        cproof = ColorProof(cdef)
+
+        # Proof starts with no outputs proven
+        self.assertEqual(len(cproof.all_outputs), 0)
+        self.assertEqual(len(cproof.unspent_outputs), 0)
+
+        # the genesis tx adds one output to all, and one to unspent
+        genesis_colored_out = ColoredOutPoint.from_tx(genesis_tx, 0)
+        expected_all_outputs = set([genesis_colored_out])
+        expected_unspent_outputs = set([genesis_colored_out])
+
+        cproof.addtx(genesis_tx)
+
+        self.assertEqual(cproof.all_outputs, expected_all_outputs)
+        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
+
+        # spend the genesis output, creating a new output
+        tx2 = CTransaction(vin=[CTxIn(prevout=genesis_colored_out)],
+                           vout=[CTxOut(add_msbdrop_value_padding(1))])
+
+        cproof.addtx(tx2)

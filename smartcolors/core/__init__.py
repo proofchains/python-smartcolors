@@ -11,7 +11,7 @@
 
 import bitcoin.core.serialize
 
-from bitcoin.core import COutPoint, CTransaction
+from bitcoin.core import COutPoint, CTransaction, b2lx
 from bitcoin.core.script import CScript
 
 
@@ -42,7 +42,7 @@ def remove_msbdrop_value_padding(padded_nValue):
 
 # Note that this function is *not* consensus critical; maybe should be moved
 # elsewhere?
-def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue):
+def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue=0):
     """Pad a nValue using MSB-Drop method
 
     minimum_nValue - minimum allowed nValue
@@ -73,9 +73,25 @@ def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue):
 
 class ColoredOutPoint(COutPoint):
     """An outpoint with color info"""
+    __slots__ = ['color_qty']
 
-    # amount of color tokens
-    amount = int
+    def __init__(self, color_qty, hash=b'\x00'*32, n=0xffffffff):
+        super().__init__(hash, n)
+        object.__setattr__(self, 'color_qty', color_qty)
+
+    @classmethod
+    def from_tx(cls, tx, n):
+        try:
+            txout = tx.vout[n]
+        except IndexError:
+            raise ValueError('n out of bounds')
+
+        color_qty = remove_msbdrop_value_padding(txout.nValue)
+        return cls(color_qty, tx.GetHash(), n)
+
+    def __repr__(self):
+        return 'ColoredOutPoint(%i, lx(%r), %i)' % (
+                    self.color_qty, b2lx(self.hash), self.n)
 
 class GenesisPointDef(bitcoin.core.serialize.ImmutableSerializable):
     """Definition of a specific genesis outpoint
@@ -259,7 +275,7 @@ class ColorProof:
     blocks/transactions are added/removed.
     """
 
-    def __init__(self, colordef, txs):
+    def __init__(self, colordef, txs=()):
         self.colordef = colordef
 
         self.all_outputs = set()
@@ -277,29 +293,38 @@ class ColorProof:
 
         new_colored_outs = set()
 
-        # Check each input to determine if it is a genesis point.
-        for txin in tx.vin:
-            prevout = txin.prevout
+        # Check tx outputs for genesis points defined by outpoint
+        for i in range(len(tx.vout)):
+            genesis_point = TxOutGenesisPointDef(COutPoint(tx.GetHash(), i))
 
-            try:
-                prevtx = self.txs[prevout.hash]
-            except IndexError:
-                # Can't prove anything without the previous tx, so continue
-                continue
+            if genesis_point in self.colordef.genesis_set:
+                color_out = ColoredOutPoint.from_tx(tx, i)
+                self.all_outputs.add(color_out)
+                self.unspent_outputs.add(color_out)
 
-            if (prevout in self.genesis_set # defined directly by COutPoint
-                or prevtx.vout[prevout.n].scriptPubKey in self.genesis_set): # defined by scriptPubKey
+        # Check inputs for spends of genesis scriptPubKeys
+        if False:
+            for txin in tx.vin:
+                prevout = txin.prevout
 
-                new_colored_out = ColoredOutPoint.from_tx(prevtx, prevout)
+                try:
+                    prevtx = self.txs[prevout.hash]
+                except IndexError:
+                    # Can't prove anything without the previous tx, so continue
+                    continue
 
-                # Add the new colored output to the known and unspent output
-                # sets. The output may in fact already be in these sets as an
-                # output can be colored by fiat by the issuer and
-                # simultaneously be colored by virtue of being a descendent of
-                # a genesis output.
-                self.all_outputs.add(new_colored_out)
-                self.unspent_outputs.add(new_colored_out)
+                if (prevout in self.genesis_set # defined directly by COutPoint
+                    or prevtx.vout[prevout.n].scriptPubKey in self.genesis_set): # defined by scriptPubKey
 
+                    new_colored_out = ColoredOutPoint.from_tx(prevtx, prevout)
+
+                    # Add the new colored output to the known and unspent output
+                    # sets. The output may in fact already be in these sets as an
+                    # output can be colored by fiat by the issuer and
+                    # simultaneously be colored by virtue of being a descendent of
+                    # a genesis output.
+                    self.all_outputs.add(new_colored_out)
+                    self.unspent_outputs.add(new_colored_out)
 
         # Apply the kernel.
         #
@@ -311,7 +336,10 @@ class ColorProof:
         # then more colored inputs become known, the second addtx() could end
         # up adding the same output to the unspent_outputs list twice, with the
         # second time having a different amount of color.
-        new_outs = self.apply_kernel(tx, self.unspent_outputs)
+        color_qtys = self.colordef.apply_kernel(tx, self.unspent_outputs)
+
+        new_outs = [ColoredOutPoint(color_qty, tx.GetHash(), i) for i, color_qty
+                        in enumerate(color_qtys) if color_qty is not None]
 
         self.all_outputs.update(new_outs)
         self.unspent_outputs.update(new_outs)

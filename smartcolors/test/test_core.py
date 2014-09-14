@@ -127,6 +127,31 @@ class Test_MSB_Drop_padding(unittest.TestCase):
         T(  0b100, 0b1111,
            0b11001)
 
+class Test_GenesisPointDef(unittest.TestCase):
+    def test_bad_deserialization(self):
+        with self.assertRaises(bitcoin.core.serialize.SerializationError):
+            GenesisPointDef.deserialize(b'\x00')
+        with self.assertRaises(bitcoin.core.serialize.SerializationError):
+            GenesisPointDef.deserialize(b'\x00'*100)
+
+    def test_serialization(self):
+        tx_gpt = TxOutGenesisPointDef(COutPoint(b'\x00'*32, 0xffffffff))
+
+        self.assertEqual(tx_gpt.serialize(),
+                x('010000000000000000000000000000000000000000000000000000000000000000ffffffff'))
+
+        script_gpt = ScriptPubKeyGenesisPointDef(CScript())
+        self.assertEqual(script_gpt.serialize(), x('0200'))
+
+        tx_gpt2 = GenesisPointDef.deserialize(
+                        x('010000000000000000000000000000000000000000000000000000000000000000ffffffff'))
+        self.assertEqual(tx_gpt2.outpoint, tx_gpt.outpoint)
+
+        script_gpt2 = GenesisPointDef.deserialize(
+                        x('0200'))
+        self.assertEqual(script_gpt2.scriptPubKey, script_gpt.scriptPubKey)
+
+
 class Test_ColorDef_kernel(unittest.TestCase):
     def make_color_tx(self, input_nsequences, output_amounts):
         """Make a test transaction"""

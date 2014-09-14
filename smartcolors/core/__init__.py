@@ -77,25 +77,80 @@ class ColoredOutPoint(COutPoint):
     # amount of color tokens
     amount = int
 
-class BaseGenesisPointDef:
+class GenesisPointDef(bitcoin.core.serialize.ImmutableSerializable):
     """Definition of a specific genesis outpoint
 
     Base class
     """
+    __slots__ = []
 
-class TxOutGenesisPointDef:
+    MAGIC = None
+
+    CLASSES_BY_MAGIC = {}
+
+    def stream_serialize(self, f):
+        f.write(self.MAGIC)
+
+    @classmethod
+    def stream_deserialize(cls, f):
+        magic = bitcoin.core.serialize.ser_read(f, 1)
+
+        try:
+            cls = cls.CLASSES_BY_MAGIC[magic]
+        except KeyError:
+            raise bitcoin.core.serialize.SerializationError(
+                    'GenesisPointDef deserialize: bad magic %r' % magic)
+
+        return cls._GenesisPointDef_stream_deserialize(f)
+
+def make_GenesisPointDef_subclass(cls):
+    GenesisPointDef.CLASSES_BY_MAGIC[cls.MAGIC] = cls
+    return cls
+
+@make_GenesisPointDef_subclass
+class TxOutGenesisPointDef(GenesisPointDef):
     """Genesis outpoint defined by a specific COutPoint"""
-    outpoint = COutPoint
+    __slots__ = ['outpoint']
 
+    MAGIC = b'\x01'
 
-class scriptPubKeyGenesisPointDef:
+    def __init__(self, outpoint):
+        object.__setattr__(self, 'outpoint', outpoint)
+
+    @classmethod
+    def _GenesisPointDef_stream_deserialize(cls, f):
+        outpoint = COutPoint.stream_deserialize(f)
+        return cls(outpoint)
+
+    def stream_serialize(self, f):
+        super(TxOutGenesisPointDef, self).stream_serialize(f)
+        self.outpoint.stream_serialize(f)
+
+@make_GenesisPointDef_subclass
+class ScriptPubKeyGenesisPointDef(GenesisPointDef):
     """Generic genesis outpoint defined as a spend of a specific scriptPubKey
 
     Note that to prove this requires having the previous transaction available.
     (can be avoided by verifying signatures)
     """
-    scriptPubKey = CScript
-    max_height = int # maximum block height the scriptPubKey is valid for
+    __slots__ = ['scriptPubKey']
+    MAGIC = b'\x02'
+
+    # FIXME: add below
+    # max_height = int # maximum block height the scriptPubKey is valid for
+
+    def __init__(self, scriptPubKey):
+        object.__setattr__(self, 'scriptPubKey', scriptPubKey)
+
+    @classmethod
+    def _GenesisPointDef_stream_deserialize(cls, f):
+        scriptPubKey = bitcoin.core.serialize.BytesSerializer.stream_deserialize(f)
+        scriptPubKey = bitcoin.core.script.CScript(scriptPubKey)
+        return cls(scriptPubKey)
+
+    def stream_serialize(self, f):
+        super(ScriptPubKeyGenesisPointDef, self).stream_serialize(f)
+        bitcoin.core.serialize.BytesSerializer.stream_serialize(self.scriptPubKey, f)
 
 
 class ColorDef(bitcoin.core.serialize.ImmutableSerializable):

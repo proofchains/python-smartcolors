@@ -164,11 +164,12 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     prev_header_hash = 'uint256'
 
 
-    def __init__(self, prevdef_hash=b'\x00'*32, genesis_set=None):
+    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32):
         if genesis_set is None:
             genesis_set = set()
-        object.__setattr__(self, 'prevdef_hash', prevdef_hash)
+        genesis_set = set(genesis_set)
         object.__setattr__(self, 'genesis_set', genesis_set)
+        object.__setattr__(self, 'prevdef_hash', prevdef_hash)
 
     def calc_color_transferred(self, txin, color_in, tx):
         """Calculate the color transferred by a specific txin

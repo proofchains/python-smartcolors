@@ -71,28 +71,6 @@ def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue=0):
         return (1 << i) | (unpadded_nValue << 1) | 0b1
 
 
-class ColoredOutPoint(COutPoint):
-    """An outpoint with color info"""
-    __slots__ = ['color_qty']
-
-    def __init__(self, color_qty, hash=b'\x00'*32, n=0xffffffff):
-        super().__init__(hash, n)
-        object.__setattr__(self, 'color_qty', color_qty)
-
-    @classmethod
-    def from_tx(cls, tx, n):
-        try:
-            txout = tx.vout[n]
-        except IndexError:
-            raise ValueError('n out of bounds')
-
-        color_qty = remove_msbdrop_value_padding(txout.nValue)
-        return cls(color_qty, tx.GetHash(), n)
-
-    def __repr__(self):
-        return 'ColoredOutPoint(%i, lx(%r), %i)' % (
-                    self.color_qty, b2lx(self.hash), self.n)
-
 class GenesisPointDef(bitcoin.core.serialize.ImmutableSerializable):
     """Definition of a specific genesis outpoint
 
@@ -278,8 +256,8 @@ class ColorProof:
     def __init__(self, colordef, txs=()):
         self.colordef = colordef
 
-        self.all_outputs = set()
-        self.unspent_outputs = set()
+        self.all_outputs = {}
+        self.unspent_outputs = {}
 
         self.txs = []
         for tx in txs:
@@ -298,9 +276,9 @@ class ColorProof:
             genesis_point = TxOutGenesisPointDef(COutPoint(tx.GetHash(), i))
 
             if genesis_point in self.colordef.genesis_set:
-                color_out = ColoredOutPoint.from_tx(tx, i)
-                self.all_outputs.add(color_out)
-                self.unspent_outputs.add(color_out)
+                color_qty = remove_msbdrop_value_padding(tx.vout[i].nValue)
+                self.all_outputs[genesis_point.outpoint] = color_qty
+                self.unspent_outputs[genesis_point.outpoint] = color_qty
 
         # Check inputs for spends of genesis scriptPubKeys
         if False:
@@ -336,15 +314,22 @@ class ColorProof:
         # then more colored inputs become known, the second addtx() could end
         # up adding the same output to the unspent_outputs list twice, with the
         # second time having a different amount of color.
-        color_qtys = self.colordef.apply_kernel(tx, self.unspent_outputs)
+        txhash = tx.GetHash()
 
-        new_outs = [ColoredOutPoint(color_qty, tx.GetHash(), i) for i, color_qty
-                        in enumerate(color_qtys) if color_qty is not None]
+        # FIXME: apply_kernel should probably just take the unspent_outputs directly
+        color_in = [self.unspent_outputs.get(txin.prevout, None) for txin in tx.vin]
+        color_qtys = self.colordef.apply_kernel(tx, color_in)
 
-        self.all_outputs.update(new_outs)
-        self.unspent_outputs.update(new_outs)
+        for i, color_qty in enumerate(color_qtys):
+            if color_qty is not None:
+                outpoint = COutPoint(txhash, i)
 
-        self.unspent_outputs.difference_update([txin.prevout for txin in tx.vin])
+                self.all_outputs[outpoint] = color_qty
+                self.unspent_outputs[outpoint] = color_qty
+
+        # remove spent colored outputs from unspent
+        for txin in tx.vin:
+            self.unspent_outputs.pop(txin.prevout, None)
 
     def removetx(self, tx):
         """Remove a transaction from the proof

@@ -78,27 +78,27 @@ class GenesisPointDef(bitcoin.core.serialize.ImmutableSerializable):
     """
     __slots__ = []
 
-    MAGIC = None
+    TYPE = None
 
-    CLASSES_BY_MAGIC = {}
+    CLASSES_BY_TYPE = {}
 
     def stream_serialize(self, f):
-        f.write(self.MAGIC)
+        f.write(self.TYPE)
 
     @classmethod
     def stream_deserialize(cls, f):
-        magic = bitcoin.core.serialize.ser_read(f, 1)
+        point_type = bitcoin.core.serialize.ser_read(f, 1)
 
         try:
-            cls = cls.CLASSES_BY_MAGIC[magic]
+            cls = cls.CLASSES_BY_TYPE[point_type]
         except KeyError:
             raise bitcoin.core.serialize.SerializationError(
-                    'GenesisPointDef deserialize: bad magic %r' % magic)
+                    'GenesisPointDef deserialize: bad genesis point type %r' % point_type)
 
         return cls._GenesisPointDef_stream_deserialize(f)
 
 def make_GenesisPointDef_subclass(cls):
-    GenesisPointDef.CLASSES_BY_MAGIC[cls.MAGIC] = cls
+    GenesisPointDef.CLASSES_BY_TYPE[cls.TYPE] = cls
     return cls
 
 @make_GenesisPointDef_subclass
@@ -106,7 +106,7 @@ class TxOutGenesisPointDef(GenesisPointDef):
     """Genesis outpoint defined by a specific COutPoint"""
     __slots__ = ['outpoint']
 
-    MAGIC = b'\x01'
+    TYPE = b'\x01'
 
     def __init__(self, outpoint):
         object.__setattr__(self, 'outpoint', outpoint)
@@ -128,7 +128,7 @@ class ScriptPubKeyGenesisPointDef(GenesisPointDef):
     (can be avoided by verifying signatures)
     """
     __slots__ = ['scriptPubKey']
-    MAGIC = b'\x02'
+    TYPE = b'\x02'
 
     # FIXME: add below
     # max_height = int # maximum block height the scriptPubKey is valid for

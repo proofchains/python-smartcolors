@@ -153,10 +153,10 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     Commits to all valid genesis points for this color in a merkle tree. This
     lets even very large color definitions be used efficiently by SPV clients.
     """
+    __slots__ = ['version', 'prevdef_hash', 'genesis_set']
 
     # Previous version of this color definition
     prev_header_hash = 'uint256'
-
 
     def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32):
         if genesis_set is None:
@@ -252,6 +252,8 @@ class ColorProof:
     to the genesis points. Also manages updates to the proof as
     blocks/transactions are added/removed.
     """
+
+    __slots__ = ['version', 'all_outputs', 'unspent_outputs', 'txs']
 
     def __init__(self, colordef, txs=()):
         self.colordef = colordef

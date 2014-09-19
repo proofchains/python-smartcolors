@@ -268,6 +268,19 @@ class Test_ColorDef_kernel(unittest.TestCase):
         color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
         self.assertEqual(color_out, [1+2+3+4+5, 0])
 
+
+    def test_color_assigned_in_isolation(self):
+        """Color assignments happen in isolation per txin"""
+
+        hdr = ColorDef()
+        tx = self.make_color_tx([0b11, 0b11], [2, 1])
+        color_out = hdr.apply_kernel(tx, (2, 2))
+
+        # The first output had a max color out of 2, but that maximum is
+        # applied *per-txin* evaluated, resulting in 4 units of color and no
+        # color at all for the second output. (although it is colored!)
+        self.assertEqual(color_out, [2+2, 0])
+
 class Test_ColorProof(unittest.TestCase):
     def test_simple_addtx(self):
         """addtx() with single input single output chain of txs"""

@@ -275,6 +275,13 @@ class Test_ColorDef_kernel(unittest.TestCase):
         color_out = hdr.apply_kernel(tx, (2, 1))
         self.assertEqual(color_out, [2, 1])
 
+    def test_zero_color_outputs(self):
+        """Zero color qty outputs"""
+        hdr = ColorDef()
+        tx = self.make_color_tx([0b11], [2, 1])
+        color_out = hdr.apply_kernel(tx, (2,))
+        self.assertEqual(color_out, [2, 0])
+
 class Test_ColorProof(unittest.TestCase):
     def test_simple_addtx(self):
         """addtx() with single input single output chain of txs"""

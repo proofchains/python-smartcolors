@@ -165,17 +165,16 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         object.__setattr__(self, 'genesis_set', genesis_set)
         object.__setattr__(self, 'prevdef_hash', prevdef_hash)
 
-    def calc_color_transferred(self, txin, color_in, tx):
+    def calc_color_transferred(self, txin, color_in, color_out, tx):
         """Calculate the color transferred by a specific txin
 
-        txin     - txin (CTxIn)
-        color_in - Amount of color present (int)
-        tx       - Transaction
+        txin      - txin (CTxIn)
+        color_in  - Color qty of input (int)
+        color_out - Color qty on outputs
+        tx        - Transaction
 
-        Returns a list of color out indexed by vout index. Colored outputs are
-        a non-negative int, uncolored outptus are None.
+        color_out is modified in-place.
         """
-        color_out = [None] * len(tx.vout)
         remaining_color_in = color_in
 
         # Which outputs the color in is being sent to is specified by
@@ -193,7 +192,9 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
                 # Color is allocated to outputs "bucket-style", where
                 # each colored input adds to colored outputs until the
-                # output is "full".
+                # output is "full". As color_out is modified in place the
+                # allocation is stateful - a previous txin can change where the
+                # next txin sends its quantity of color.
                 max_color_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
                 color_transferred = min(remaining_color_in, max_color_out - color_out[j])
                 color_out[j] += color_transferred
@@ -207,7 +208,6 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         # happen explicitly, rather than implicitly, which may be
         # useful in the future to reduce proof sizes for large
         # transactions.
-        return color_out
 
     def apply_kernel(self, tx, color_in):
         """Apply the color kernel to a transaction
@@ -222,6 +222,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         outputs are a >= 0 integer, uncolored outputs are None.
         """
 
+        # FIXME: need a top-leve overview of the thinking behind nSequence
+
         color_out = [None] * len(tx.vout)
 
         for (i, txin) in enumerate(tx.vin):
@@ -230,11 +232,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
                 continue
 
             else:
-                for i, amount in enumerate(self.calc_color_transferred(txin, color_in[i], tx)):
-                    if amount is not None:
-                        if color_out[i] is None:
-                            color_out[i] = 0
-                        color_out[i] += amount
+                self.calc_color_transferred(txin, color_in[i], color_out, tx)
 
         return color_out
 

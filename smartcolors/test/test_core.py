@@ -354,7 +354,6 @@ class Test_ColorProof(unittest.TestCase):
 
     def test_complex_addtx(self):
         """addtx() with complex, randomized, multi-input multi-output set of transactions"""
-        return
 
         # create a set of n genesis transactions each with (1, m) genesis outputs
         n = 100
@@ -436,7 +435,6 @@ class Test_ColorProof(unittest.TestCase):
 
             tx = CTransaction(vin, vout)
 
-            import pdb; pdb.set_trace()
             cproof.addtx(tx)
 
             sum_out2 = sum(cproof.unspent_outputs[COutPoint(tx.GetHash(), i)] for i in range(len(tx.vout)))
@@ -449,8 +447,6 @@ class Test_ColorProof(unittest.TestCase):
                 outpoint = COutPoint(tx.GetHash(), i)
                 color_qty = remove_msbdrop_value_padding(txout.nValue)
 
-                import pdb; pdb.set_trace()
-
                 expected_all_outputs[outpoint] = color_qty
                 self.assertEqual(cproof.all_outputs[outpoint], color_qty)
 
@@ -459,4 +455,4 @@ class Test_ColorProof(unittest.TestCase):
 
 
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.all_unspent_outputs, expected_unspent_outputs)
+        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)

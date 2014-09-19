@@ -253,7 +253,7 @@ class ColorProof:
     blocks/transactions are added/removed.
     """
 
-    __slots__ = ['version', 'all_outputs', 'unspent_outputs', 'txs']
+    __slots__ = ['version', 'colordef', 'all_outputs', 'unspent_outputs', 'txs']
 
     def __init__(self, colordef, txs=()):
         self.colordef = colordef

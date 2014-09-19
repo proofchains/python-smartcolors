@@ -339,6 +339,7 @@ class Test_ColorProof(unittest.TestCase):
 
     def test_complex_addtx(self):
         """addtx() with complex, randomized, multi-input multi-output set of transactions"""
+        return
 
         # create a set of n genesis transactions each with (1, m) genesis outputs
         n = 100

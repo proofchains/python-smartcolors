@@ -184,7 +184,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
             # in nSequence is set to one. This is chosen to allow
             # standard transactions with standard-looking nSquence's to
             # move color.
-            if (txin.nSequence >> j) & 0b1 == 1:
+            if remaining_color_in and (txin.nSequence >> j) & 0b1 == 1:
                 # Mark the output as being colored if it hasn't been
                 # already.
                 if color_out[j] is None:
@@ -219,7 +219,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         color_in - Color in by txin idx
 
         Return a list of amount of color out indexed by vout index. Colored
-        outputs are a >= 0 integer, uncolored outputs are None.
+        outputs are a non-zero integers, uncolored outputs are None.
         """
 
         # FIXME: need a top-leve overview of the thinking behind nSequence

@@ -202,7 +202,7 @@ class Test_ColorDef_kernel(unittest.TestCase):
         # Exactly enough color in to fill first output but not second
         tx = self.make_color_tx([0b11], [1, 2])
         color_out = hdr.apply_kernel(tx, (1,))
-        self.assertEqual(color_out, [1, 0])
+        self.assertEqual(color_out, [1, None])
 
         # Enough color in to fill first output and part of second
         tx = self.make_color_tx([0b11], [1, 3])
@@ -210,15 +210,16 @@ class Test_ColorDef_kernel(unittest.TestCase):
         self.assertEqual(color_out, [1, 2])
 
         # Three colored outputs. The result specifies the last output as
-        # colored, but with the amount of color == 0
+        # colored, but it remains uncolored due to the other two outputs using
+        # up all available color.
         tx = self.make_color_tx([0b111], [1, 3, 4])
         color_out = hdr.apply_kernel(tx, (3,))
-        self.assertEqual(color_out, [1, 2, 0])
+        self.assertEqual(color_out, [1, 2, None])
 
         # As above, but with an uncolored output as well
         tx = self.make_color_tx([0b1011], [1, 3, 4, 5])
         color_out = hdr.apply_kernel(tx, (3,))
-        self.assertEqual(color_out, [1, 2, None, 0])
+        self.assertEqual(color_out, [1, 2, None, None])
 
     def test_one_to_two_more_than_max(self):
         """One colored input to two colored outputs, color_in > max_out"""
@@ -266,7 +267,7 @@ class Test_ColorDef_kernel(unittest.TestCase):
 
         tx = self.make_color_tx([0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
         color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
-        self.assertEqual(color_out, [1+2+3+4+5, 0])
+        self.assertEqual(color_out, [1+2+3+4+5, None])
 
     def test_color_assigned_statefully(self):
         """Color is assigned statefully"""
@@ -280,7 +281,7 @@ class Test_ColorDef_kernel(unittest.TestCase):
         hdr = ColorDef()
         tx = self.make_color_tx([0b11], [2, 1])
         color_out = hdr.apply_kernel(tx, (2,))
-        self.assertEqual(color_out, [2, 0])
+        self.assertEqual(color_out, [2, None])
 
 class Test_ColorProof(unittest.TestCase):
     def test_simple_addtx(self):

@@ -402,11 +402,11 @@ class Test_ColorProof(unittest.TestCase):
         self.assertEqual(sum(cproof.unspent_outputs.values()), sum_genesis_color_qty)
 
         # Create n transactions spending the colored outputs, conserving color.
-        n = 1
+        n = 100
         for i in range(n):
             # spend a random subset of all unspent outputs
             unspent_subset = random.sample(cproof.unspent_outputs.items(),
-                                           random.randint(1, 32))
+                                           min(len(cproof.unspent_outputs), random.randint(1, 32)))
 
             sum_in = sum(color_qty for outpoint, color_qty in unspent_subset)
             self.assertTrue(sum_in > 0)
@@ -433,11 +433,17 @@ class Test_ColorProof(unittest.TestCase):
                 txout = CTxOut(add_msbdrop_value_padding(color_qty))
                 vout.append(txout)
 
-            tx = CTransaction(vin, vout)
+            # ensure there is always at least one output
+            if remaining_color:
+                txout = CTxOut(add_msbdrop_value_padding(remaining_color))
+                vout.append(txout)
 
+            else:
+                assert len(vout) > 0
+
+            tx = CTransaction(vin, vout)
             cproof.addtx(tx)
 
-            sum_out2 = sum(cproof.unspent_outputs[COutPoint(tx.GetHash(), i)] for i in range(len(tx.vout)))
 
             for vin in tx.vin:
                 del expected_unspent_outputs[vin.prevout]
@@ -456,3 +462,6 @@ class Test_ColorProof(unittest.TestCase):
 
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
+
+        # final check how much color there is
+        self.assertEqual(sum(cproof.unspent_outputs.values()), sum_genesis_color_qty)

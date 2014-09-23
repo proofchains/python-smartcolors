@@ -9,6 +9,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import struct
+
 import bitcoin.core.serialize
 
 from bitcoin.core import COutPoint, CTransaction, b2lx
@@ -153,17 +155,43 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     Commits to all valid genesis points for this color in a merkle tree. This
     lets even very large color definitions be used efficiently by SPV clients.
     """
-    __slots__ = ['version', 'prevdef_hash', 'genesis_set']
+    __slots__ = ['version', 'prevdef_hash', 'genesis_set', 'birthdate_blockheight']
 
-    # Previous version of this color definition
-    prev_header_hash = 'uint256'
+    VERSION = 0
 
-    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32):
+    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32, version=0, birthdate_blockheight=0):
+        object.__setattr__(self, 'version', version)
+
         if genesis_set is None:
             genesis_set = set()
         genesis_set = set(genesis_set)
+
         object.__setattr__(self, 'genesis_set', genesis_set)
         object.__setattr__(self, 'prevdef_hash', prevdef_hash)
+        object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
+
+    @classmethod
+    def stream_deserialize(cls, f):
+        version = struct.unpack(b"<I", ser_read(f,4))[0]
+        if version != cls.VERSION:
+            raise SerializationError('wrong version: got %d; expected %d' % (version, cls.VERSION))
+
+        birthdate_blockheight = struct.unpack(b"<I", ser_read(f,4))[0]
+
+        prevdef_hash = bitcoin.core.serialize.ser_read(f, 32)
+
+        genesis_set = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
+        return cls(genesis_set=genesis_set, prevdef_hash=prevdef_hash,
+                   version=version, birthdate_blockheight=birthdate_blockheight)
+
+    def stream_serialize(self, f):
+        f.write(struct.pack(b'<I', self.version))
+        f.write(struct.pack(b'<I', self.birthdate_blockheight))
+        assert len(self.prevdef_hash) == 32
+        f.write(self.prevdef_hash)
+        sorted_genesis_set = sorted(self.genesis_set) # to get consistent hashes
+        # FIXME: get serialization class right
+        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_set, f)
 
     def calc_color_transferred(self, txin, color_in, color_out, tx):
         """Calculate the color transferred by a specific txin

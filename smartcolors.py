@@ -44,8 +44,6 @@ def complete_tx(vin, vin_prev_txouts, vout, unspent_txouts, change_scriptPubKey,
     sum_out = sum(txout.nValue for txout in vout)
     sum_in = sum(vin_prev_txouts[txin.prevout].nValue for txin in vin)
 
-    vout.append(CTxOut(0, change_scriptPubKey))
-
     logging.debug('sum_in=%d, sum_out=%d' % (sum_in, sum_out))
     while sum_in < sum_out + fee:
         if not unspent_txouts:
@@ -59,7 +57,7 @@ def complete_tx(vin, vin_prev_txouts, vout, unspent_txouts, change_scriptPubKey,
         logging.debug('Adding txin %r nValue=%d' % (new_txin.prevout, new_unspent['amount']))
         vin.append(new_txin)
 
-    change_amount = sum_in - (sum_out - fee)
+    change_amount = sum_in - (sum_out + fee)
     if change_amount > fee:
         vout.append(CTxOut(change_amount, change_scriptPubKey))
 
@@ -78,7 +76,7 @@ def pretty_json_dump(obj, fd):
 
 def cmd_issue(args):
     args.addr = bitcoin.wallet.CBitcoinAddress(args.addr)
-    padded_nValue = add_msbdrop_value_padding(args.qty, minimum_nValue=1000)
+    padded_nValue = add_msbdrop_value_padding(args.qty, minimum_nValue=args.dust)
 
     issue_txout = bitcoin.core.CTxOut(padded_nValue, args.addr.to_scriptPubKey())
 
@@ -94,6 +92,8 @@ def cmd_issue(args):
 
     genesis_tx = r['tx']
 
+    logging.debug('Genesis tx: %s' % b2x(genesis_tx.serialize()))
+
     # Create ColorDef
     #
     # genesis_tx.vout[0] will be our GenesisPoint
@@ -105,7 +105,55 @@ def cmd_issue(args):
     logging.info('New ColorDef: %s' % b2x(colordef.serialize()))
 
 def cmd_sendtoaddress(args):
-    pass
+    args.txin = lx(args.txin)
+    colored_outpoint = COutPoint(args.txin, args.n)
+
+    r = args.proxy.gettxout(colored_outpoint)
+    colored_txout = r['txout']
+
+
+    args.addr = bitcoin.wallet.CBitcoinAddress(args.addr)
+
+    sum_color_qty_in = remove_msbdrop_value_padding(colored_txout.nValue)
+    change_qty = sum_color_qty_in - args.qty
+
+    logging.debug('Sum color qty in: %d' % sum_color_qty_in)
+
+    vout = [CTxOut(add_msbdrop_value_padding(args.qty, args.dust), args.addr.to_scriptPubKey())]
+
+    nSequence = 0b1
+    if change_qty < 0:
+        logging.error("Not enough color: %d < %d" % (sum_color_qty_in, args.qty))
+        sys.exit(1)
+
+    elif change_qty > 0:
+        logging.debug('Adding color change txout: %d' % change_qty)
+        nSequence = nSequence << 1 | 0b1
+
+        color_change_addr = args.proxy.getrawchangeaddress()
+        color_change_txout = CTxOut(add_msbdrop_value_padding(change_qty, args.dust), color_change_addr.to_scriptPubKey())
+        vout.append(color_change_txout)
+
+    vin = [CTxIn(colored_outpoint, nSequence=nSequence)]
+
+    vin_prev_txouts = {colored_outpoint:colored_txout}
+    vin, vout = complete_tx(vin, vin_prev_txouts,
+                            vout,
+                            args.proxy.listunspent(),
+                            args.proxy.getrawchangeaddress().to_scriptPubKey(),
+                            args.fee_per_kb)
+
+    unsigned_color_tx = CTransaction(vin, vout)
+
+    r = args.proxy.signrawtransaction(unsigned_color_tx)
+    if not r['complete']:
+        logging.error("Failed to sign tx: %s" % b2x(r['tx'].serialize()))
+        sys.exit(1)
+
+    color_tx = r['tx']
+
+    logging.debug('Tx: %s' % b2x(color_tx.serialize()))
+
 
 def cmd_scan(args):
     pass
@@ -119,8 +167,10 @@ parser.add_argument("-t","--testnet",action='store_true',
                              help="Use testnet instead of mainnet")
 parser.add_argument("-d","--datadir",type=str,default='~/.smartcolors',
                              help="Data directory")
-parser.add_argument("-f","--fee-per-kb",type=float,default=0.0001,
+parser.add_argument("--fee-per-kb",type=float,default=0.0001,
                              help="Fee-per-kb to use")
+parser.add_argument("--dust",type=float,default=0.0001,
+                             help="Dust threshold")
 parser.add_argument("-q","--quiet",action="count",default=0,
                              help="Be more quiet.")
 parser.add_argument("-v","--verbose",action="count",default=0,
@@ -140,6 +190,10 @@ parser_issue.set_defaults(cmd_func=cmd_issue)
 
 parser_sendtoaddress = subparsers.add_parser('sendtoaddress',
     help='Send color to an address')
+parser_sendtoaddress.add_argument('txin', type=str, metavar='TXIN',
+    help='Colored outpoint txid')
+parser_sendtoaddress.add_argument('n', type=int, metavar='N',
+    help='Colored outpoint n')
 parser_sendtoaddress.add_argument('color', type=str, metavar='COLOR',
     help='Color')
 parser_sendtoaddress.add_argument('addr', type=str, metavar='ADDR',
@@ -175,6 +229,9 @@ if args.testnet:
 
 args.fee_per_kb = int(args.fee_per_kb * COIN)
 logging.debug('Fee-per-kb: %d satoshis/KB' % args.fee_per_kb)
+
+args.dust = int(args.dust * COIN)
+logging.debug('Dust threshold: %d satoshis' % args.dust)
 
 args.proxy = bitcoin.rpc.Proxy()
 

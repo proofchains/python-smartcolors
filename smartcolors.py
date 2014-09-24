@@ -19,6 +19,7 @@ if sys.version_info.major != 3:
     raise ImportError("Python3 required")
 
 import argparse
+import collections
 import json
 import logging
 import time
@@ -26,11 +27,28 @@ import time
 import bitcoin
 import bitcoin.core
 import bitcoin.rpc
-import bitcoin.wallet
 
 from bitcoin.core import *
+from bitcoin.wallet import *
 
 from smartcolors.core import *
+
+class SimpleWallet:
+    def __init__(self):
+        self.secrets_by_scriptPubKey = {}
+
+        # FIXME: hardcoded temp code
+        secret = CBitcoinSecret('L3jf5DUv2aticuJJmzpmvMte5oFx7X8YYZUCM5iqE4VkytYnirCK')
+        addr = P2PKHBitcoinAddress.from_pubkey(secret.pub) # n4LpQr4EVSZ8YsytrugmyJVyF24Z6fG2DH
+
+        self.secrets_by_scriptPubKey[addr.to_scriptPubKey()] = secret
+
+wallet = SimpleWallet()
+
+# FIXME: all this is temp code
+colordef = ColorDef([TxOutGenesisPointDef(COutPoint(lx('a18ed2595af17c30f5968a1c93de2364ae8d5af9d547f2336aafda8ed529fb2e'), 0))])
+
+colorproof = ColorProof(colordef)
 
 def complete_tx(vin, vin_prev_txouts, vout, unspent_txouts, change_scriptPubKey, fee):
     """Complete a transaction
@@ -75,7 +93,7 @@ def pretty_json_dump(obj, fd):
 # Commands
 
 def cmd_issue(args):
-    args.addr = bitcoin.wallet.CBitcoinAddress(args.addr)
+    args.addr = CBitcoinAddress(args.addr)
     padded_nValue = add_msbdrop_value_padding(args.qty, minimum_nValue=args.dust)
 
     issue_txout = bitcoin.core.CTxOut(padded_nValue, args.addr.to_scriptPubKey())
@@ -105,6 +123,8 @@ def cmd_issue(args):
     logging.info('New ColorDef: %s' % b2x(colordef.serialize()))
 
 def cmd_sendtoaddress(args):
+    cmd_scan(args)
+
     args.txin = lx(args.txin)
     colored_outpoint = COutPoint(args.txin, args.n)
 
@@ -112,7 +132,7 @@ def cmd_sendtoaddress(args):
     colored_txout = r['txout']
 
 
-    args.addr = bitcoin.wallet.CBitcoinAddress(args.addr)
+    args.addr = CBitcoinAddress(args.addr)
 
     sum_color_qty_in = remove_msbdrop_value_padding(colored_txout.nValue)
     change_qty = sum_color_qty_in - args.qty
@@ -137,9 +157,14 @@ def cmd_sendtoaddress(args):
     vin = [CTxIn(colored_outpoint, nSequence=nSequence)]
 
     vin_prev_txouts = {colored_outpoint:colored_txout}
+
+    # don't spend colored outputs
+    unspent_outputs = [unspent for unspent in args.proxy.listunspent()
+                           if unspent['outpoint'] not in colorproof.all_outputs]
+
     vin, vout = complete_tx(vin, vin_prev_txouts,
                             vout,
-                            args.proxy.listunspent(),
+                            unspent_outputs,
                             args.proxy.getrawchangeaddress().to_scriptPubKey(),
                             args.fee_per_kb)
 
@@ -156,7 +181,53 @@ def cmd_sendtoaddress(args):
 
 
 def cmd_scan(args):
-    pass
+    cur_block = 281296
+
+    while cur_block < args.proxy.getblockcount():
+        cur_block += 1
+
+        # FIXME: handle reorgs
+
+        block = args.proxy.getblock(args.proxy.getblockhash(cur_block))
+
+        logging.debug('Scanning block %s height %d' % (b2lx(block.GetHash()), cur_block))
+
+        for tx in block.vtx:
+            logging.debug('Scanning tx %s' % b2lx(tx.GetHash()))
+            colorproof.addtx(tx)
+
+    # Check mempool
+    #
+    # Ugly because we need to do this in topological order
+    logging.debug('Scanning mempool')
+    mempool_txs = set(args.proxy.getrawtransaction(txid) for txid in args.proxy.getrawmempool())
+    changed = True
+    while changed and mempool_txs:
+        changed = False
+
+        for tx in mempool_txs:
+            # Ugly!
+            old_all_outputs_len = len(colorproof.all_outputs)
+
+            colorproof.addtx(tx)
+
+            if old_all_outputs_len != len(colorproof.all_outputs):
+                logging.debug('Tx %s moved color' % b2lx(tx.GetHash()))
+                # changed, remove that tx and try again
+                changed = True
+                mempool_txs.remove(tx)
+                break
+
+    logging.info('All colored outputs')
+    for outpoint, qty in colorproof.all_outputs.items():
+        logging.info('    %s %s' % (outpoint, qty))
+
+
+    logging.info('Unspent colored outputs')
+    for outpoint, qty in colorproof.unspent_outputs.items():
+        logging.info('    %s %s' % (outpoint, qty))
+    logging.info('Unspent sum qty: %d' % sum(colorproof.unspent_outputs.values()))
+
 
 def cmd_listunspent(args):
     pass

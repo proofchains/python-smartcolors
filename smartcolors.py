@@ -125,16 +125,30 @@ def cmd_issue(args):
 def cmd_sendtoaddress(args):
     cmd_scan(args)
 
-    args.txin = lx(args.txin)
-    colored_outpoint = COutPoint(args.txin, args.n)
-
-    r = args.proxy.gettxout(colored_outpoint)
-    colored_txout = r['txout']
-
-
     args.addr = CBitcoinAddress(args.addr)
 
-    sum_color_qty_in = remove_msbdrop_value_padding(colored_txout.nValue)
+    # Filter the unspent color outs list against the addresses in our wallet
+    sum_color_qty_in = 0
+    colored_inputs = []
+    for unspent_color_out, qty in colorproof.unspent_outputs.items():
+        r = args.proxy.gettxout(unspent_color_out)
+        try:
+            addr = CBitcoinAddress.from_scriptPubKey(r['txout'].scriptPubKey)
+        except CBitcoinAddressError:
+            continue
+
+        r = args.proxy.validateaddress(addr)
+        if r['ismine']:
+            colored_inputs.append(unspent_color_out)
+            sum_color_qty_in += qty
+
+            if sum_color_qty_in >= args.qty:
+                break
+
+    if sum_color_qty_in < args.qty:
+        logging.error("Not enough color available: %d < %d" % (sum_color_qty_in, args.qty))
+        sys.exit(1)
+
     change_qty = sum_color_qty_in - args.qty
 
     logging.debug('Sum color qty in: %d' % sum_color_qty_in)
@@ -142,11 +156,7 @@ def cmd_sendtoaddress(args):
     vout = [CTxOut(add_msbdrop_value_padding(args.qty, args.dust), args.addr.to_scriptPubKey())]
 
     nSequence = 0b1
-    if change_qty < 0:
-        logging.error("Not enough color: %d < %d" % (sum_color_qty_in, args.qty))
-        sys.exit(1)
-
-    elif change_qty > 0:
+    if change_qty > 0:
         logging.debug('Adding color change txout: %d' % change_qty)
         nSequence = nSequence << 1 | 0b1
 
@@ -154,9 +164,9 @@ def cmd_sendtoaddress(args):
         color_change_txout = CTxOut(add_msbdrop_value_padding(change_qty, args.dust), color_change_addr.to_scriptPubKey())
         vout.append(color_change_txout)
 
-    vin = [CTxIn(colored_outpoint, nSequence=nSequence)]
+    vin = [CTxIn(colored_input, nSequence=nSequence) for colored_input in colored_inputs]
 
-    vin_prev_txouts = {colored_outpoint:colored_txout}
+    vin_prev_txouts = {txin.prevout:args.proxy.gettxout(txin.prevout)['txout'] for txin in vin}
 
     # don't spend colored outputs
     unspent_outputs = [unspent for unspent in args.proxy.listunspent()
@@ -177,7 +187,13 @@ def cmd_sendtoaddress(args):
 
     color_tx = r['tx']
 
-    logging.debug('Tx: %s' % b2x(color_tx.serialize()))
+    if args.dry_run:
+        logging.info('Tx: %s' % b2x(color_tx.serialize()))
+
+    else:
+        txid = args.proxy.sendrawtransaction(color_tx)
+        logging.info('Sent txid: %s' % b2lx(txid))
+
 
 
 def cmd_scan(args):
@@ -200,23 +216,29 @@ def cmd_scan(args):
     #
     # Ugly because we need to do this in topological order
     logging.debug('Scanning mempool')
-    mempool_txs = set(args.proxy.getrawtransaction(txid) for txid in args.proxy.getrawmempool())
-    changed = True
-    while changed and mempool_txs:
-        changed = False
+    mempool_txs = {txid:args.proxy.getrawtransaction(txid) for txid in args.proxy.getrawmempool()}
+    while mempool_txs:
+        # Find all mempool_txs that don't depend on other mempool_txs
+        root_txs = {}
+        for txid, tx in mempool_txs.items():
+            is_root = True
+            for txin in tx.vin:
+                if txin.prevout.hash in mempool_txs:
+                    is_root = False
+                    break
 
-        for tx in mempool_txs:
-            # Ugly!
-            old_all_outputs_len = len(colorproof.all_outputs)
+            if is_root:
+                logging.debug('txid %s is a mempool root' % b2lx(txid))
+                root_txs[txid] = tx
 
+        for txid in root_txs.keys():
+            del mempool_txs[txid]
+
+        logging.debug('adding roots')
+
+        # add those roots
+        for tx in root_txs.values():
             colorproof.addtx(tx)
-
-            if old_all_outputs_len != len(colorproof.all_outputs):
-                logging.debug('Tx %s moved color' % b2lx(tx.GetHash()))
-                # changed, remove that tx and try again
-                changed = True
-                mempool_txs.remove(tx)
-                break
 
     logging.info('All colored outputs')
     for outpoint, qty in colorproof.all_outputs.items():
@@ -261,10 +283,8 @@ parser_issue.set_defaults(cmd_func=cmd_issue)
 
 parser_sendtoaddress = subparsers.add_parser('sendtoaddress',
     help='Send color to an address')
-parser_sendtoaddress.add_argument('txin', type=str, metavar='TXIN',
-    help='Colored outpoint txid')
-parser_sendtoaddress.add_argument('n', type=int, metavar='N',
-    help='Colored outpoint n')
+parser.add_argument('-n', '--dry-run', action='store_true',
+        help='Stop before actually doing anything')
 parser_sendtoaddress.add_argument('color', type=str, metavar='COLOR',
     help='Color')
 parser_sendtoaddress.add_argument('addr', type=str, metavar='ADDR',

@@ -154,44 +154,50 @@ class Test_GenesisPointDef(unittest.TestCase):
 
 
 class Test_ColorDef_kernel(unittest.TestCase):
-    def make_color_tx(self, input_nsequences, output_amounts):
+    def make_color_tx(self, kernel, input_nSequences, output_amounts):
         """Make a test transaction"""
-        vin = [CTxIn(nSequence=nSequence) for nSequence in input_nsequences]
+        vin = []
+        for i, decrypted_nSequence in enumerate(input_nSequences):
+            outpoint = COutPoint(n=i)
+            nSequence_pad = kernel.nSequence_pad(outpoint)
+            txin = CTxIn(outpoint, nSequence=(decrypted_nSequence ^ nSequence_pad))
+            vin.append(txin)
+
         vout = [CTxOut(add_msbdrop_value_padding(nValue, 0)) for nValue in output_amounts]
         return CTransaction(vin, vout)
 
     def test_no_colored_inputs(self):
         """Degenerate case of no colored inputs or outputs"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0], [0])
+        tx = self.make_color_tx(hdr, [0], [0])
         color_out = hdr.apply_kernel(tx, (None,))
         self.assertEqual(color_out, [None])
 
     def test_one_to_one_exact(self):
         """One colored input to one colored output, color_in == max_out"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b1], [1])
+        tx = self.make_color_tx(hdr, [0b1], [1])
         color_out = hdr.apply_kernel(tx, (1,))
         self.assertEqual(color_out, [1])
 
     def test_one_to_one_less_than_max(self):
         """One colored input to one colored output, color_in < max_out"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b1], [10])
+        tx = self.make_color_tx(hdr, [0b1], [10])
         color_out = hdr.apply_kernel(tx, (1,))
         self.assertEqual(color_out, [1])
 
     def test_one_to_one_more_than_max(self):
         """One colored input to one colored output, color_in > max_out"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b1], [1])
+        tx = self.make_color_tx(hdr, [0b1], [1])
         color_out = hdr.apply_kernel(tx, (2,))
         self.assertEqual(color_out, [1])
 
     def test_one_to_two_exact(self):
         """One colored input to two colored outputs, color_in == max_out"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b11], [1, 2])
+        tx = self.make_color_tx(hdr, [0b11], [1, 2])
         color_out = hdr.apply_kernel(tx, (3,))
         self.assertEqual(color_out, [1, 2])
 
@@ -200,24 +206,24 @@ class Test_ColorDef_kernel(unittest.TestCase):
         hdr = ColorDef()
 
         # Exactly enough color in to fill first output but not second
-        tx = self.make_color_tx([0b11], [1, 2])
+        tx = self.make_color_tx(hdr, [0b11], [1, 2])
         color_out = hdr.apply_kernel(tx, (1,))
         self.assertEqual(color_out, [1, None])
 
         # Enough color in to fill first output and part of second
-        tx = self.make_color_tx([0b11], [1, 3])
+        tx = self.make_color_tx(hdr, [0b11], [1, 3])
         color_out = hdr.apply_kernel(tx, (3,))
         self.assertEqual(color_out, [1, 2])
 
         # Three colored outputs. The result specifies the last output as
         # colored, but it remains uncolored due to the other two outputs using
         # up all available color.
-        tx = self.make_color_tx([0b111], [1, 3, 4])
+        tx = self.make_color_tx(hdr, [0b111], [1, 3, 4])
         color_out = hdr.apply_kernel(tx, (3,))
         self.assertEqual(color_out, [1, 2, None])
 
         # As above, but with an uncolored output as well
-        tx = self.make_color_tx([0b1011], [1, 3, 4, 5])
+        tx = self.make_color_tx(hdr, [0b1011], [1, 3, 4, 5])
         color_out = hdr.apply_kernel(tx, (3,))
         self.assertEqual(color_out, [1, 2, None, None])
 
@@ -226,12 +232,12 @@ class Test_ColorDef_kernel(unittest.TestCase):
         hdr = ColorDef()
 
         # Both filled with one left over
-        tx = self.make_color_tx([0b11], [1, 2])
+        tx = self.make_color_tx(hdr, [0b11], [1, 2])
         color_out = hdr.apply_kernel(tx, (4,))
         self.assertEqual(color_out, [1, 2])
 
         # Remaining isn't assigned to uncolored outputs
-        tx = self.make_color_tx([0b11], [1, 2, 3])
+        tx = self.make_color_tx(hdr, [0b11], [1, 2, 3])
         color_out = hdr.apply_kernel(tx, (4,))
         self.assertEqual(color_out, [1, 2, None])
 
@@ -240,13 +246,13 @@ class Test_ColorDef_kernel(unittest.TestCase):
         hdr = ColorDef()
 
         # 1:1 mapping
-        tx = self.make_color_tx([0b01, 0b10], [1, 2])
+        tx = self.make_color_tx(hdr, [0b01, 0b10], [1, 2])
         color_out = hdr.apply_kernel(tx, (1,2))
         self.assertEqual(color_out, [1, 2])
 
         # Mapping reversed, which means the second input is sending color to
         # both outputs
-        tx = self.make_color_tx([0b10, 0b11], [1, 2])
+        tx = self.make_color_tx(hdr, [0b10, 0b11], [1, 2])
         color_out = hdr.apply_kernel(tx, (1,2))
         self.assertEqual(color_out, [1, 2])
 
@@ -254,32 +260,32 @@ class Test_ColorDef_kernel(unittest.TestCase):
         """Two colored inputs to two colored outputs, color left over but not assigned"""
         hdr = ColorDef()
 
-        tx = self.make_color_tx([0b10, 0b01], [2, 3, 4])
+        tx = self.make_color_tx(hdr, [0b10, 0b01], [2, 3, 4])
         color_out = hdr.apply_kernel(tx, (1,3))
         self.assertEqual(color_out, [2, 1, None])
 
     def test_multiple_to_one(self):
         hdr = ColorDef()
 
-        tx = self.make_color_tx([0b1, 0b1, 0b1, 0b1, 0b1], [1+2+3+4+5])
+        tx = self.make_color_tx(hdr, [0b1, 0b1, 0b1, 0b1, 0b1], [1+2+3+4+5])
         color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
         self.assertEqual(color_out, [1+2+3+4+5])
 
-        tx = self.make_color_tx([0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
+        tx = self.make_color_tx(hdr, [0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
         color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
         self.assertEqual(color_out, [1+2+3+4+5, None])
 
     def test_color_assigned_statefully(self):
         """Color is assigned statefully"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b11, 0b11], [2, 1])
+        tx = self.make_color_tx(hdr, [0b11, 0b11], [2, 1])
         color_out = hdr.apply_kernel(tx, (2, 1))
         self.assertEqual(color_out, [2, 1])
 
     def test_zero_color_outputs(self):
         """Zero color qty outputs"""
         hdr = ColorDef()
-        tx = self.make_color_tx([0b11], [2, 1])
+        tx = self.make_color_tx(hdr, [0b11], [2, 1])
         color_out = hdr.apply_kernel(tx, (2,))
         self.assertEqual(color_out, [2, None])
 
@@ -310,7 +316,8 @@ class Test_ColorProof(unittest.TestCase):
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
         # spend the genesis output, creating a new output
-        tx2 = CTransaction(vin=[CTxIn(prevout=genesis_outpoint)],
+        tx2 = CTransaction(vin=[CTxIn(prevout=genesis_outpoint,
+                                      nSequence=0xffffffff ^ cdef.nSequence_pad(genesis_outpoint))],
                            vout=[CTxOut(add_msbdrop_value_padding(1))])
 
         tx2_colored_outpoint = COutPoint(tx2.GetHash(), 0)
@@ -324,7 +331,8 @@ class Test_ColorProof(unittest.TestCase):
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
         # again
-        tx3 = CTransaction(vin=[CTxIn(prevout=tx2_colored_outpoint)],
+        tx3 = CTransaction(vin=[CTxIn(prevout=tx2_colored_outpoint,
+                                      nSequence=0xffffffff ^ cdef.nSequence_pad(tx2_colored_outpoint))],
                            vout=[CTxOut(add_msbdrop_value_padding(1))])
 
         tx3_colored_outpoint = COutPoint(tx3.GetHash(), 0)
@@ -338,7 +346,8 @@ class Test_ColorProof(unittest.TestCase):
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
         # destroy the color, resulting in no unspent colored outputs
-        tx4 = CTransaction(vin=[CTxIn(prevout=tx3_colored_outpoint, nSequence=0)],
+        tx4 = CTransaction(vin=[CTxIn(prevout=tx3_colored_outpoint,
+                                      nSequence=0 ^ cdef.nSequence_pad(tx3_colored_outpoint))],
                            vout=[CTxOut(add_msbdrop_value_padding(1))]) # won't be colored
 
         del expected_unspent_outputs[tx3_colored_outpoint]
@@ -411,7 +420,8 @@ class Test_ColorProof(unittest.TestCase):
             sum_in = sum(color_qty for outpoint, color_qty in unspent_subset)
             self.assertTrue(sum_in > 0)
 
-            vin = [CTxIn(outpoint) for outpoint, color_qty in unspent_subset]
+            vin = [CTxIn(outpoint, nSequence=0xffffffff ^ cdef.nSequence_pad(outpoint))
+                      for outpoint, color_qty in unspent_subset]
 
             # Create outputs.
             #

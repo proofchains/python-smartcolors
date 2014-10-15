@@ -9,6 +9,7 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import os
 import struct
 
 import bitcoin.core.serialize
@@ -155,12 +156,21 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     Commits to all valid genesis points for this color in a merkle tree. This
     lets even very large color definitions be used efficiently by SPV clients.
     """
-    __slots__ = ['version', 'prevdef_hash', 'genesis_set', 'birthdate_blockheight']
+    __slots__ = ['version',
+                 'prevdef_hash',
+                 'genesis_set',
+                 'birthdate_blockheight',
+                 'stegkey',
+                ]
 
     VERSION = 0
 
-    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32, version=0, birthdate_blockheight=0):
+    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32, version=0, birthdate_blockheight=0, stegkey=None):
         object.__setattr__(self, 'version', version)
+
+        if stegkey is None:
+            stegkey = os.urandom(16)
+        assert len(stegkey) == 16
 
         if genesis_set is None:
             genesis_set = set()
@@ -169,6 +179,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         object.__setattr__(self, 'genesis_set', genesis_set)
         object.__setattr__(self, 'prevdef_hash', prevdef_hash)
         object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
+        object.__setattr__(self, 'stegkey', stegkey)
 
     @classmethod
     def stream_deserialize(cls, f):
@@ -193,6 +204,18 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         # FIXME: get serialization class right
         bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_set, f)
 
+    def nSequence_pad(self, outpoint):
+        """Derive the nSequence pad from a given outpoint
+
+        Returns an int that can be XORed with the desired value to get
+        nSequence.
+        """
+        # Magic: 916782d006cd95e3d24b698df0aeb28e
+        b = b'\x91\x67\x82\xd0\x06\xcd\x95\xe3\xd2\x4b\x69\x8d\xf0\xae\xb2\x8e' \
+            + self.stegkey + outpoint.hash + struct.pack('<I', outpoint.n)
+        pad = bitcoin.core.serialize.Hash(b)[0:4]
+        return struct.unpack('<I', pad)[0]
+
     def calc_color_transferred(self, txin, color_in, color_out, tx):
         """Calculate the color transferred by a specific txin
 
@@ -207,12 +230,13 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
         # Which outputs the color in is being sent to is specified by
         # nSequence.
+        decrypted_nSequence = self.nSequence_pad(txin.prevout) ^ txin.nSequence
         for j in range(min(len(tx.vout), 32)):
             # An output is marked as colored if the corresponding bit
             # in nSequence is set to one. This is chosen to allow
             # standard transactions with standard-looking nSquence's to
             # move color.
-            if remaining_color_in and (txin.nSequence >> j) & 0b1 == 1:
+            if remaining_color_in and (decrypted_nSequence >> j) & 0b1 == 1:
                 # Mark the output as being colored if it hasn't been
                 # already.
                 if color_out[j] is None:

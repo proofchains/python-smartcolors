@@ -158,7 +158,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     """
     __slots__ = ['version',
                  'prevdef_hash',
-                 'genesis_set',
+                 'genesis_outpoint_set',
                  'birthdate_blockheight',
                  'stegkey',
                 ]
@@ -166,7 +166,7 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     VERSION = 0
 
     def __init__(self, *,
-                 genesis_set=None,
+                 genesis_outpoint_set=None,
                  prevdef_hash=b'\x00'*32,
                  version=0,
                  birthdate_blockheight=0,
@@ -177,11 +177,11 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
             stegkey = os.urandom(16)
         assert len(stegkey) == 16
 
-        if genesis_set is None:
-            genesis_set = set()
-        genesis_set = set(genesis_set)
+        if genesis_outpoint_set is None:
+            genesis_outpoint_set = set()
+        genesis_outpoint_set = set(genesis_outpoint_set)
 
-        object.__setattr__(self, 'genesis_set', genesis_set)
+        object.__setattr__(self, 'genesis_outpoint_set', genesis_outpoint_set)
         object.__setattr__(self, 'prevdef_hash', prevdef_hash)
         object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
         object.__setattr__(self, 'stegkey', stegkey)
@@ -196,8 +196,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
         prevdef_hash = bitcoin.core.serialize.ser_read(f, 32)
 
-        genesis_set = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
-        return cls(genesis_set=genesis_set, prevdef_hash=prevdef_hash,
+        genesis_outpoint_set = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
+        return cls(genesis_outpoint_set=genesis_outpoint_set, prevdef_hash=prevdef_hash,
                    version=version, birthdate_blockheight=birthdate_blockheight)
 
     def stream_serialize(self, f):
@@ -205,9 +205,9 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         f.write(struct.pack(b'<I', self.birthdate_blockheight))
         assert len(self.prevdef_hash) == 32
         f.write(self.prevdef_hash)
-        sorted_genesis_set = sorted(self.genesis_set) # to get consistent hashes
+        sorted_genesis_outpoint_set = sorted(self.genesis_outpoint_set) # to get consistent hashes
         # FIXME: get serialization class right
-        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_set, f)
+        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_outpoint_set, f)
 
     def nSequence_pad(self, outpoint):
         """Derive the nSequence pad from a given outpoint
@@ -294,10 +294,10 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         return color_out
 
     def prune(self, relevant_genesis_outs):
-        pruned_genesis_set = self.genesis_set.prove_contains(relevant_genesis_outs)
+        pruned_genesis_outpoint_set = self.genesis_outpoint_set.prove_contains(relevant_genesis_outs)
 
         # Note how we allow subclasses to work!
-        return self.__class__(self.prevdef_hash, pruned_genesis_set)
+        return self.__class__(self.prevdef_hash, pruned_genesis_outpoint_set)
 
 
 class ColorProof:
@@ -332,7 +332,7 @@ class ColorProof:
         for i in range(len(tx.vout)):
             genesis_point = TxOutGenesisPointDef(COutPoint(tx.GetHash(), i))
 
-            if genesis_point in self.colordef.genesis_set:
+            if genesis_point in self.colordef.genesis_outpoint_set:
                 color_qty = remove_msbdrop_value_padding(tx.vout[i].nValue)
                 self.all_outputs[genesis_point.outpoint] = color_qty
                 self.unspent_outputs[genesis_point.outpoint] = color_qty
@@ -348,8 +348,8 @@ class ColorProof:
                     # Can't prove anything without the previous tx, so continue
                     continue
 
-                if (prevout in self.genesis_set # defined directly by COutPoint
-                    or prevtx.vout[prevout.n].scriptPubKey in self.genesis_set): # defined by scriptPubKey
+                if (prevout in self.genesis_outpoint_set # defined directly by COutPoint
+                    or prevtx.vout[prevout.n].scriptPubKey in self.genesis_outpoint_set): # defined by scriptPubKey
 
                     new_colored_out = ColoredOutPoint.from_tx(prevtx, prevout)
 

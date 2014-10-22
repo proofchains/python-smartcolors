@@ -297,7 +297,7 @@ class Test_ColorProof(unittest.TestCase):
 
         txout_genesis_point = TxOutGenesisPointDef(COutPoint(genesis_tx.GetHash(), 0))
 
-        cdef = ColorDef([txout_genesis_point])
+        cdef = ColorDef(genesis_set=[txout_genesis_point])
 
         cproof = ColorProof(cdef)
 
@@ -398,7 +398,7 @@ class Test_ColorProof(unittest.TestCase):
                 txout_genesis_point = TxOutGenesisPointDef(outpoint)
                 genesis_points.append(txout_genesis_point)
 
-        cdef = ColorDef(genesis_points)
+        cdef = ColorDef(genesis_set=genesis_points)
 
         cproof = ColorProof(cdef)
         for genesis_tx in genesis_txs:

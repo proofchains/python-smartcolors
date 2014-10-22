@@ -46,7 +46,7 @@ class SimpleWallet:
 wallet = SimpleWallet()
 
 # FIXME: all this is temp code
-colordef = ColorDef([TxOutGenesisPointDef(COutPoint(lx('a18ed2595af17c30f5968a1c93de2364ae8d5af9d547f2336aafda8ed529fb2e'), 0))])
+colordef = ColorDef(genesis_outpoint_set=[TxOutGenesisPointDef(COutPoint(lx('a18ed2595af17c30f5968a1c93de2364ae8d5af9d547f2336aafda8ed529fb2e'), 0))])
 
 colorproof = ColorProof(colordef)
 
@@ -117,7 +117,7 @@ def cmd_issue(args):
     # genesis_tx.vout[0] will be our GenesisPoint
     genesis_point = TxOutGenesisPointDef(COutPoint(genesis_tx.GetHash(), 0))
     birthdate_blockheight = args.proxy.getblockcount() - 10
-    colordef = ColorDef([genesis_point], birthdate_blockheight=birthdate_blockheight)
+    colordef = ColorDef(genesis_outpoint_set=[genesis_point], birthdate_blockheight=birthdate_blockheight)
 
     logging.info('New ColorDef hash %s' % b2x(colordef.GetHash()))
     logging.info('New ColorDef: %s' % b2x(colordef.serialize()))

@@ -165,7 +165,12 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
     VERSION = 0
 
-    def __init__(self, genesis_set=None, prevdef_hash=b'\x00'*32, version=0, birthdate_blockheight=0, stegkey=None):
+    def __init__(self, *,
+                 genesis_set=None,
+                 prevdef_hash=b'\x00'*32,
+                 version=0,
+                 birthdate_blockheight=0,
+                 stegkey=None):
         object.__setattr__(self, 'version', version)
 
         if stegkey is None:

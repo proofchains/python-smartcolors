@@ -221,17 +221,17 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         pad = bitcoin.core.serialize.Hash(b)[0:4]
         return struct.unpack('<I', pad)[0]
 
-    def calc_color_transferred(self, txin, color_in, color_out, tx):
+    def calc_color_transferred(self, txin, color_qty_in, color_qtys_out, tx):
         """Calculate the color transferred by a specific txin
 
-        txin      - txin (CTxIn)
-        color_in  - Color qty of input (int)
-        color_out - Color qty on outputs
-        tx        - Transaction
+        txin           - txin (CTxIn)
+        color_qty_in   - Color qty of input txin (int)
+        color_qtys_out - Color qty on outputs (list of ints)
+        tx             - Transaction
 
         color_out is modified in-place.
         """
-        remaining_color_in = color_in
+        remaining_color_qty_in = color_qty_in
 
         # Which outputs the color in is being sent to is specified by
         # nSequence.
@@ -241,30 +241,29 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
             # in nSequence is set to one. This is chosen to allow
             # standard transactions with standard-looking nSquence's to
             # move color.
-            if remaining_color_in and (decrypted_nSequence >> j) & 0b1 == 1:
+            if remaining_color_qty_in and (decrypted_nSequence >> j) & 0b1 == 1:
                 # Mark the output as being colored if it hasn't been
                 # already.
-                if color_out[j] is None:
-                    color_out[j] = 0
+                if color_qtys_out[j] is None:
+                    color_qtys_out[j] = 0
 
-                # Color is allocated to outputs "bucket-style", where
-                # each colored input adds to colored outputs until the
-                # output is "full". As color_out is modified in place the
-                # allocation is stateful - a previous txin can change where the
-                # next txin sends its quantity of color.
-                max_color_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
-                color_transferred = min(remaining_color_in, max_color_out - color_out[j])
-                color_out[j] += color_transferred
-                remaining_color_in -= color_transferred
+                # Color is allocated to outputs "bucket-style", where each
+                # colored input adds to colored outputs until the output is
+                # "full". As color_qtys_out is modified in place the allocation
+                # is stateful - a previous txin can change where the next txin
+                # sends its quantity of color.
+                max_color_qty_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
+                color_transferred = min(remaining_color_qty_in, max_color_qty_out - color_qtys_out[j])
+                color_qtys_out[j] += color_transferred
+                remaining_color_qty_in -= color_transferred
 
                 assert color_transferred >= 0
-                assert remaining_color_in >= 0
+                assert remaining_color_qty_in >= 0
 
-        # Any remaining color that hasn't been sent to an output by the
-        # txin is simply destroyed. This ensures all color transfers
-        # happen explicitly, rather than implicitly, which may be
-        # useful in the future to reduce proof sizes for large
-        # transactions.
+        # Any remaining color that hasn't been sent to an output by the txin is
+        # simply destroyed. This ensures all color transfers happen explicitly,
+        # rather than implicitly, which may be useful in the future to reduce
+        # proof sizes for large transactions.
 
     def apply_kernel(self, tx, color_in):
         """Apply the color kernel to a transaction

@@ -170,35 +170,35 @@ class Test_ColorDef_kernel(unittest.TestCase):
         """Degenerate case of no colored inputs or outputs"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0], [0])
-        color_out = hdr.apply_kernel(tx, (None,))
+        color_out = hdr.apply_kernel(tx, {})
         self.assertEqual(color_out, [None])
 
     def test_one_to_one_exact(self):
         """One colored input to one colored output, color_in == max_out"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b1], [1])
-        color_out = hdr.apply_kernel(tx, (1,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1})
         self.assertEqual(color_out, [1])
 
     def test_one_to_one_less_than_max(self):
         """One colored input to one colored output, color_in < max_out"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b1], [10])
-        color_out = hdr.apply_kernel(tx, (1,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1})
         self.assertEqual(color_out, [1])
 
     def test_one_to_one_more_than_max(self):
         """One colored input to one colored output, color_in > max_out"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b1], [1])
-        color_out = hdr.apply_kernel(tx, (2,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:2})
         self.assertEqual(color_out, [1])
 
     def test_one_to_two_exact(self):
         """One colored input to two colored outputs, color_in == max_out"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b11], [1, 2])
-        color_out = hdr.apply_kernel(tx, (3,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:3})
         self.assertEqual(color_out, [1, 2])
 
     def test_one_to_two_less_than_max(self):
@@ -207,24 +207,24 @@ class Test_ColorDef_kernel(unittest.TestCase):
 
         # Exactly enough color in to fill first output but not second
         tx = self.make_color_tx(hdr, [0b11], [1, 2])
-        color_out = hdr.apply_kernel(tx, (1,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1})
         self.assertEqual(color_out, [1, None])
 
         # Enough color in to fill first output and part of second
         tx = self.make_color_tx(hdr, [0b11], [1, 3])
-        color_out = hdr.apply_kernel(tx, (3,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:3})
         self.assertEqual(color_out, [1, 2])
 
         # Three colored outputs. The result specifies the last output as
         # colored, but it remains uncolored due to the other two outputs using
         # up all available color.
         tx = self.make_color_tx(hdr, [0b111], [1, 3, 4])
-        color_out = hdr.apply_kernel(tx, (3,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:3})
         self.assertEqual(color_out, [1, 2, None])
 
         # As above, but with an uncolored output as well
         tx = self.make_color_tx(hdr, [0b1011], [1, 3, 4, 5])
-        color_out = hdr.apply_kernel(tx, (3,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:3})
         self.assertEqual(color_out, [1, 2, None, None])
 
     def test_one_to_two_more_than_max(self):
@@ -233,12 +233,12 @@ class Test_ColorDef_kernel(unittest.TestCase):
 
         # Both filled with one left over
         tx = self.make_color_tx(hdr, [0b11], [1, 2])
-        color_out = hdr.apply_kernel(tx, (4,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:4})
         self.assertEqual(color_out, [1, 2])
 
         # Remaining isn't assigned to uncolored outputs
         tx = self.make_color_tx(hdr, [0b11], [1, 2, 3])
-        color_out = hdr.apply_kernel(tx, (4,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:4})
         self.assertEqual(color_out, [1, 2, None])
 
     def test_two_to_two_exact(self):
@@ -247,13 +247,13 @@ class Test_ColorDef_kernel(unittest.TestCase):
 
         # 1:1 mapping
         tx = self.make_color_tx(hdr, [0b01, 0b10], [1, 2])
-        color_out = hdr.apply_kernel(tx, (1,2))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1, tx.vin[1].prevout:2})
         self.assertEqual(color_out, [1, 2])
 
         # Mapping reversed, which means the second input is sending color to
         # both outputs
         tx = self.make_color_tx(hdr, [0b10, 0b11], [1, 2])
-        color_out = hdr.apply_kernel(tx, (1,2))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1, tx.vin[1].prevout:2})
         self.assertEqual(color_out, [1, 2])
 
     def test_two_to_two_color_left_over(self):
@@ -261,32 +261,32 @@ class Test_ColorDef_kernel(unittest.TestCase):
         hdr = ColorDef()
 
         tx = self.make_color_tx(hdr, [0b10, 0b01], [2, 3, 4])
-        color_out = hdr.apply_kernel(tx, (1,3))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:1, tx.vin[1].prevout:3})
         self.assertEqual(color_out, [2, 1, None])
 
     def test_multiple_to_one(self):
         hdr = ColorDef()
 
         tx = self.make_color_tx(hdr, [0b1, 0b1, 0b1, 0b1, 0b1], [1+2+3+4+5])
-        color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
+        color_out = hdr.apply_kernel(tx, {tx.vin[i].prevout:i+1 for i in range(5)})
         self.assertEqual(color_out, [1+2+3+4+5])
 
         tx = self.make_color_tx(hdr, [0b11, 0b11, 0b11, 0b11, 0b11], [1+2+3+4+5, 100])
-        color_out = hdr.apply_kernel(tx, (1,2,3,4,5))
+        color_out = hdr.apply_kernel(tx, {tx.vin[i].prevout:i+1 for i in range(5)})
         self.assertEqual(color_out, [1+2+3+4+5, None])
 
     def test_color_assigned_statefully(self):
         """Color is assigned statefully"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b11, 0b11], [2, 1])
-        color_out = hdr.apply_kernel(tx, (2, 1))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:2, tx.vin[1].prevout:1})
         self.assertEqual(color_out, [2, 1])
 
     def test_zero_color_outputs(self):
         """Zero color qty outputs"""
         hdr = ColorDef()
         tx = self.make_color_tx(hdr, [0b11], [2, 1])
-        color_out = hdr.apply_kernel(tx, (2,))
+        color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:2})
         self.assertEqual(color_out, [2, None])
 
 class Test_ColorProof(unittest.TestCase):

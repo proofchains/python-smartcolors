@@ -265,32 +265,40 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         # rather than implicitly, which may be useful in the future to reduce
         # proof sizes for large transactions.
 
-    def apply_kernel(self, tx, color_in):
+    def apply_kernel(self, tx, color_qty_by_outpoint):
         """Apply the color kernel to a transaction
 
         The kernel only tracks the movement of color from input to output; the
         creation of genesis txouts is handled separately.
 
-        tx       - The transaction
-        color_in - Color in by txin idx
+        tx                    - The transaction
+        color_qty_by_outpoint - Dict-like of color qty by outpoint
 
         Return a list of amount of color out indexed by vout index. Colored
         outputs are a non-zero integers, uncolored outputs are None.
+
+        FIXME: describe behavior if spent outpoints are in
+               color_qty_by_outpoint
         """
 
-        # FIXME: need a top-leve overview of the thinking behind nSequence
+        # FIXME: need a top-level overview of the thinking behind nSequence
 
-        color_out = [None] * len(tx.vout)
+        color_qtys_out = [None] * len(tx.vout)
 
-        for (i, txin) in enumerate(tx.vin):
-            if color_in[i] is None:
+        for txin in tx.vin:
+            try:
+                color_qty_in = color_qty_by_outpoint[txin.prevout]
+            except KeyError:
+                color_qty_in = None
+
+            if color_qty_in is None:
                 # Input not colored
                 continue
 
             else:
-                self.calc_color_transferred(txin, color_in[i], color_out, tx)
+                self.calc_color_transferred(txin, color_qty_in, color_qtys_out, tx)
 
-        return color_out
+        return color_qtys_out
 
     def prune(self, relevant_genesis_outs):
         pruned_genesis_outpoint_set = self.genesis_outpoint_set.prove_contains(relevant_genesis_outs)
@@ -372,9 +380,7 @@ class ColorProof:
         # second time having a different amount of color.
         txhash = tx.GetHash()
 
-        # FIXME: apply_kernel should probably just take the unspent_outputs directly
-        color_in = [self.unspent_outputs.get(txin.prevout, None) for txin in tx.vin]
-        color_qtys = self.colordef.apply_kernel(tx, color_in)
+        color_qtys = self.colordef.apply_kernel(tx, self.unspent_outputs)
 
         for i, color_qty in enumerate(color_qtys):
             if color_qty is not None:

@@ -258,6 +258,8 @@ def cmd_listunspent(args):
 parser = argparse.ArgumentParser(description='Smartcolors demo tool')
 parser.add_argument("-t","--testnet",action='store_true',
                              help="Use testnet instead of mainnet")
+parser.add_argument("-r","--regtest",action='store_true',
+                             help="Use regtest instead of mainnet")
 parser.add_argument("-d","--datadir",type=str,default='~/.smartcolors',
                              help="Data directory")
 parser.add_argument("--fee-per-kb",type=float,default=0.0001,
@@ -314,9 +316,17 @@ elif args.verbosity == -1:
 elif args.verbosity < -2:
     logging.root.setLevel(logging.ERROR)
 
-if args.testnet:
+if args.testnet and not args.regtest:
     logging.debug('Using testnet')
     bitcoin.SelectParams('testnet')
+
+elif args.regtest and not args.testnet:
+    logging.debug('Using regtest')
+    bitcoin.SelectParams('regtest')
+
+else:
+    # FIXME
+    args.error('Must specify either testnet or regtest, not both')
 
 args.fee_per_kb = int(args.fee_per_kb * COIN)
 logging.debug('Fee-per-kb: %d satoshis/KB' % args.fee_per_kb)

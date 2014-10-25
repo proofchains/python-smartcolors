@@ -188,11 +188,11 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
     @classmethod
     def stream_deserialize(cls, f):
-        version = struct.unpack(b"<I", ser_read(f,4))[0]
+        version = struct.unpack(b"<I", bitcoin.core.serialize.ser_read(f,4))[0]
         if version != cls.VERSION:
             raise SerializationError('wrong version: got %d; expected %d' % (version, cls.VERSION))
 
-        birthdate_blockheight = struct.unpack(b"<I", ser_read(f,4))[0]
+        birthdate_blockheight = struct.unpack(b"<I", bitcoin.core.serialize.ser_read(f,4))[0]
 
         prevdef_hash = bitcoin.core.serialize.ser_read(f, 32)
 

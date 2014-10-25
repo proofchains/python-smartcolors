@@ -119,6 +119,8 @@ def cmd_issue(args):
     birthdate_blockheight = args.proxy.getblockcount() - 10
     colordef = ColorDef(genesis_outpoint_set=[genesis_point], birthdate_blockheight=birthdate_blockheight)
 
+    colordef.stream_serialize(args.fd)
+
     logging.info('New ColorDef hash %s' % b2x(colordef.GetHash()))
     logging.info('New ColorDef: %s' % b2x(colordef.serialize()))
 
@@ -281,6 +283,8 @@ parser_issue.add_argument('addr', type=str, metavar='ADDR',
     help='Address')
 parser_issue.add_argument('qty', type=int, metavar='QTY',
     help='Quantity of color')
+parser_issue.add_argument('fd', type=argparse.FileType('xb'), metavar='FILE',
+    help='Color definition file')
 parser_issue.set_defaults(cmd_func=cmd_issue)
 
 parser_sendtoaddress = subparsers.add_parser('sendtoaddress',

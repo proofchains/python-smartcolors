@@ -1,0 +1,18 @@
+ColorProof:
+
+merge two proofs together efficiently, ram efficiently
+
+this is doable if the CProof.txs is a dag rather than a list
+
+have simplecolordb record proofs as it goes along, dumping them onto disk
+
+/txid/<txid>/vout/<vout>/<color>/proof
+/txid/<txid>/color/<colorid>/proof
+
+these two proof files can be just hardlinks right now!
+
+
+proof is at tx level, that is, a given tx has colored inputs of that colorid
+
+use atomic rename technique to replace old proof with new (if old exists at
+all!)

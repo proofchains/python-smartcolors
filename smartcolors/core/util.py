@@ -43,18 +43,20 @@ class DagTuple:
         """
         return self.extend((value,))
 
-    def __iter__(self, *, _visited=None):
+    def __iter__(self):
         """Iterate in depth-first order"""
-        if _visited is None:
-            _visited = set()
 
-        if id(self) in _visited:
-            yield from ()
+        visited = set()
+        stack = [(iter(self.parents), self.values)]
 
-        else:
-            _visited.add(id(self))
+        while stack:
+            try:
+                parent = next(stack[-1][0])
 
-            for parent in self.parents:
-                yield from parent.__iter__(_visited=_visited)
+                if id(parent) not in visited:
+                    visited.add(id(parent))
+                    stack.append((iter(parent.parents), parent.values))
 
-            yield from self.values
+            except StopIteration:
+                yield from stack[-1][1]
+                stack.pop()

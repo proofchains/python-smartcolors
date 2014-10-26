@@ -82,12 +82,33 @@ class Test_DagTuple(unittest.TestCase):
         self.assertEqual(tuple(dt5), ('1a', '2a', '2b', '3a', '3b', '4', '1b', '5'))
 
     def test_very_deep_graph(self):
-        dt = DagTuple()
+        n = 10000
+        v1a = ['1a_%d' % i for i in range(n)]
+        v1b = ['1b_%d' % i for i in range(n)]
+        v2a = ['2a_%d' % i for i in range(n)]
+        v2b = ['2b_%d' % i for i in range(n)]
 
-        for v in range(10000):
-            dt = dt.append(v)
+        def repeated_append(dt, values):
+            for value in values:
+                dt = dt.append(value)
+            return dt
 
-        self.assertEqual(tuple(dt), tuple(range(10000)))
+        dt1a = repeated_append(DagTuple(), v1a)
+        dt1b = repeated_append(DagTuple(), v1b)
+
+        self.assertEqual(list(dt1a), v1a)
+        self.assertEqual(list(dt1b), v1b)
+
+        dt1ab = DagTuple(['1ab'], parents=(dt1a, dt1b))
+        self.assertEqual(list(dt1ab), v1a + v1b + ['1ab'])
+
+        dt2a = repeated_append(dt1ab, v2a)
+        dt2b = repeated_append(dt1ab, v2b)
+        self.assertEqual(list(dt2a), v1a + v1b + ['1ab'] + v2a)
+        self.assertEqual(list(dt2b), v1a + v1b + ['1ab'] + v2b)
+
+        dt2ab = DagTuple(['2ab'], parents=(dt2a, dt2b))
+        self.assertEqual(list(dt2ab), v1a + v1b + ['1ab'] + v2a + v2b + ['2ab'])
 
     def test_immutable(self):
         dt = DagTuple()

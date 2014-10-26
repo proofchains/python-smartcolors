@@ -60,3 +60,9 @@ class DagTuple:
             except StopIteration:
                 yield from stack[-1][1]
                 stack.pop()
+
+    def __bool__(self):
+        # FIXME: inefficient in some edge cases
+        for value in self:
+            return True
+        return False

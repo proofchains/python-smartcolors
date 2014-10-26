@@ -118,3 +118,14 @@ class Test_DagTuple(unittest.TestCase):
             dt.parents = (DagTuple(),)
         with self.assertRaises(AttributeError):
             dt.values = (1,2,3)
+
+    def test_bool(self):
+        dt = DagTuple()
+        self.assertFalse(dt)
+
+        dt = DagTuple(parents=[DagTuple(), DagTuple()])
+        self.assertFalse(dt)
+
+        self.assertFalse(dt)
+        dt = DagTuple(parents=[DagTuple(), DagTuple([1])])
+        self.assertTrue(dt)

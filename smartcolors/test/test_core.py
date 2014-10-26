@@ -301,17 +301,20 @@ class Test_ColorProof(unittest.TestCase):
 
         cproof = ColorProof(cdef)
 
-        # Proof starts with no outputs proven
+        # Proof starts with no outputs proven and no txs
         self.assertEqual(len(cproof.all_outputs), 0)
         self.assertEqual(len(cproof.unspent_outputs), 0)
+        self.assertFalse(cproof.txs)
 
         # the genesis tx adds one output to all, and one to unspent
         genesis_outpoint = COutPoint(genesis_tx.GetHash(), 0)
         expected_all_outputs = {genesis_outpoint: 1}
         expected_unspent_outputs = {genesis_outpoint: 1}
+        expected_txs = [genesis_tx]
 
         cproof.addtx(genesis_tx)
 
+        self.assertEqual(list(cproof.txs), expected_txs)
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
@@ -324,9 +327,11 @@ class Test_ColorProof(unittest.TestCase):
         expected_all_outputs[tx2_colored_outpoint] = 1
         del expected_unspent_outputs[genesis_outpoint]
         expected_unspent_outputs[tx2_colored_outpoint] = 1
+        expected_txs.append(tx2)
 
         cproof.addtx(tx2)
 
+        self.assertEqual(list(cproof.txs), expected_txs)
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
@@ -339,9 +344,11 @@ class Test_ColorProof(unittest.TestCase):
         expected_all_outputs[tx3_colored_outpoint] = 1
         del expected_unspent_outputs[tx2_colored_outpoint]
         expected_unspent_outputs[tx3_colored_outpoint] = 1
+        expected_txs.append(tx3)
 
         cproof.addtx(tx3)
 
+        self.assertEqual(list(cproof.txs), expected_txs)
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
@@ -351,9 +358,11 @@ class Test_ColorProof(unittest.TestCase):
                            vout=[CTxOut(add_msbdrop_value_padding(1))]) # won't be colored
 
         del expected_unspent_outputs[tx3_colored_outpoint]
+        expected_txs.append(tx4)
 
         cproof.addtx(tx4)
 
+        self.assertEqual(list(cproof.txs), expected_txs)
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 
@@ -372,6 +381,8 @@ class Test_ColorProof(unittest.TestCase):
         sum_genesis_color_qty = 0
         expected_all_outputs = {}
         expected_unspent_outputs = {}
+        expected_txs = []
+
         for i in range(n):
             vin = ()
 
@@ -403,6 +414,7 @@ class Test_ColorProof(unittest.TestCase):
         cproof = ColorProof(cdef)
         for genesis_tx in genesis_txs:
             cproof.addtx(genesis_tx)
+            expected_txs.append(genesis_tx)
 
         # unspent and all outputs should be identical
         self.assertEqual(cproof.all_outputs, cproof.unspent_outputs)
@@ -453,6 +465,7 @@ class Test_ColorProof(unittest.TestCase):
 
             tx = CTransaction(vin, vout)
             cproof.addtx(tx)
+            expected_txs.append(tx)
 
 
             for vin in tx.vin:
@@ -470,6 +483,7 @@ class Test_ColorProof(unittest.TestCase):
                 self.assertEqual(cproof.unspent_outputs[outpoint], color_qty)
 
 
+        self.assertEqual(list(cproof.txs), expected_txs)
         self.assertEqual(cproof.all_outputs, expected_all_outputs)
         self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
 

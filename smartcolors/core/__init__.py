@@ -13,6 +13,7 @@ import os
 import struct
 
 import bitcoin.core.serialize
+import smartcolors.core.util
 
 from bitcoin.core import COutPoint, CTransaction, b2lx
 from bitcoin.core.script import CScript
@@ -323,7 +324,7 @@ class ColorProof:
         self.all_outputs = {}
         self.unspent_outputs = {}
 
-        self.txs = []
+        self.txs = smartcolors.core.util.DagTuple()
         for tx in txs:
             self.addtx(tx)
 
@@ -332,6 +333,8 @@ class ColorProof:
 
         self.outputs will be updated
         """
+
+        tx_relevant = False
 
         new_colored_outs = set()
 
@@ -344,29 +347,10 @@ class ColorProof:
                 self.all_outputs[genesis_point.outpoint] = color_qty
                 self.unspent_outputs[genesis_point.outpoint] = color_qty
 
+                tx_relevant = True
+
         # Check inputs for spends of genesis scriptPubKeys
-        if False:
-            for txin in tx.vin:
-                prevout = txin.prevout
-
-                try:
-                    prevtx = self.txs[prevout.hash]
-                except IndexError:
-                    # Can't prove anything without the previous tx, so continue
-                    continue
-
-                if (prevout in self.genesis_outpoint_set # defined directly by COutPoint
-                    or prevtx.vout[prevout.n].scriptPubKey in self.genesis_outpoint_set): # defined by scriptPubKey
-
-                    new_colored_out = ColoredOutPoint.from_tx(prevtx, prevout)
-
-                    # Add the new colored output to the known and unspent output
-                    # sets. The output may in fact already be in these sets as an
-                    # output can be colored by fiat by the issuer and
-                    # simultaneously be colored by virtue of being a descendent of
-                    # a genesis output.
-                    self.all_outputs.add(new_colored_out)
-                    self.unspent_outputs.add(new_colored_out)
+        # FIXME: implement
 
         # Apply the kernel.
         #
@@ -391,7 +375,13 @@ class ColorProof:
 
         # remove spent colored outputs from unspent
         for txin in tx.vin:
-            self.unspent_outputs.pop(txin.prevout, None)
+            spent = self.unspent_outputs.pop(txin.prevout, None)
+
+            if spent is not None:
+                tx_relevant = True
+
+        if tx_relevant:
+            self.txs = self.txs.append(tx)
 
     def removetx(self, tx):
         """Remove a transaction from the proof

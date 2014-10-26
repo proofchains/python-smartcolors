@@ -21,7 +21,6 @@ class Test_DagTuple(unittest.TestCase):
 
         dt = DagTuple((1,2,3))
         self.assertEqual(tuple(dt), (1,2,3))
-        self.assertEqual(tuple(reversed(dt)), (3,2,1))
 
     def test_extend(self):
         dt1 = DagTuple((1,2))
@@ -50,17 +49,45 @@ class Test_DagTuple(unittest.TestCase):
         self.assertEqual(tuple(dt3), (1,2,3,))
         self.assertEqual(tuple(dt4), (1,2,3,4,))
 
-    def test_merge_no_common_parents(self):
+    def test_iter_no_common_parents(self):
         dt_a = DagTuple(['a'])
         dt_b = DagTuple(['b'])
+        dt_c = DagTuple(['c'])
 
-        dt_ab = dt_a.merge([dt_b])
+        dt_ab = DagTuple(parents=[dt_a, dt_b])
         self.assertEqual(tuple(dt_ab), ('a','b'))
 
-        dt_ba = dt_b.merge([dt_a])
+        dt_ba = DagTuple(parents=[dt_b, dt_a])
         self.assertEqual(tuple(dt_ba), ('b','a'))
 
-        dt_c = DagTuple(['b'])
+        dt_abc = DagTuple(parents=[dt_a, dt_b, dt_c])
+        self.assertEqual(tuple(dt_abc), ('a','b','c'))
+
+    def test_iter(self):
+        dt1a = DagTuple(['1a'])
+        dt2a = dt1a.append('2a')
+        dt2b = dt1a.append('2b')
+
+        dt3a = DagTuple(['3a'], parents=[dt2a, dt2b])
+        self.assertEqual(tuple(dt3a), ('1a', '2a', '2b', '3a'))
+
+        dt3b = DagTuple(['3b'], parents=[dt2b, dt2a])
+        self.assertEqual(tuple(dt3b), ('1a', '2b', '2a', '3b'))
+
+        dt4 = DagTuple(['4'], parents=[dt3a, dt3b])
+        self.assertEqual(tuple(dt4), ('1a', '2a', '2b', '3a', '3b', '4'))
+
+        dt1b = DagTuple(['1b'])
+        dt5 = DagTuple(['5'], parents=[dt4, dt1b])
+        self.assertEqual(tuple(dt5), ('1a', '2a', '2b', '3a', '3b', '4', '1b', '5'))
+
+    def test_very_deep_graph(self):
+        dt = DagTuple()
+
+        for v in range(10000):
+            dt = dt.append(v)
+
+        self.assertEqual(tuple(dt), tuple(range(10000)))
 
     def test_immutable(self):
         dt = DagTuple()

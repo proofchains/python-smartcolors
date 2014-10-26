@@ -24,11 +24,6 @@ class DagTuple:
         object.__setattr__(self, 'parents', tuple(parents))
         object.__setattr__(self, 'values', tuple(iterable))
 
-    @classmethod
-    def merge(cls, iterable):
-        self = cls()
-        object.__setattr__(self, 'parents', tuple(iterable))
-
     def extend(self, iterable):
         """Extend by appending elements from the iterable
 
@@ -48,27 +43,18 @@ class DagTuple:
         """
         return self.extend((value,))
 
-    def merge(self, tips):
-        """Merge multiple Dag tips into one"""
-        parents = [self]
-        parents.extend(tips)
-        return self.__class__(parents=parents)
+    def __iter__(self, *, _visited=None):
+        """Iterate in depth-first order"""
+        if _visited is None:
+            _visited = set()
 
+        if id(self) in _visited:
+            yield from ()
 
-    def __iter__(self):
-        """Iterate in insertion order"""
-        reversed_values = tuple(reversed(self))
-        yield from reversed(reversed_values)
+        else:
+            _visited.add(id(self))
 
-    def __reversed__(self):
-        """Iterate in reversed insertion order"""
-        parents = (self, )
+            for parent in self.parents:
+                yield from parent.__iter__(_visited=_visited)
 
-        while parents:
-            next_parents = []
-            for parent in reversed(parents):
-                yield from reversed(parent.values)
-
-                next_parents.extend(parent.parents)
-
-            parents = next_parents
+            yield from self.values

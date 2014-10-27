@@ -233,6 +233,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
         return color_qtys_out
 
+    def is_pruned(self):
+        return False
 
 class ColorProofValidationError(Exception):
     pass

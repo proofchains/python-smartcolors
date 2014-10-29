@@ -75,82 +75,6 @@ def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue=0):
         return (1 << i) | (unpadded_nValue << 1) | 0b1
 
 
-class GenesisPointDef(bitcoin.core.serialize.ImmutableSerializable):
-    """Definition of a specific genesis outpoint
-
-    Base class
-    """
-    __slots__ = []
-
-    TYPE = None
-
-    CLASSES_BY_TYPE = {}
-
-    def stream_serialize(self, f):
-        f.write(self.TYPE)
-
-    @classmethod
-    def stream_deserialize(cls, f):
-        point_type = bitcoin.core.serialize.ser_read(f, 1)
-
-        try:
-            cls = cls.CLASSES_BY_TYPE[point_type]
-        except KeyError:
-            raise bitcoin.core.serialize.SerializationError(
-                    'GenesisPointDef deserialize: bad genesis point type %r' % point_type)
-
-        return cls._GenesisPointDef_stream_deserialize(f)
-
-def make_GenesisPointDef_subclass(cls):
-    GenesisPointDef.CLASSES_BY_TYPE[cls.TYPE] = cls
-    return cls
-
-@make_GenesisPointDef_subclass
-class TxOutGenesisPointDef(GenesisPointDef):
-    """Genesis outpoint defined by a specific COutPoint"""
-    __slots__ = ['outpoint']
-
-    TYPE = b'\x01'
-
-    def __init__(self, outpoint):
-        object.__setattr__(self, 'outpoint', outpoint)
-
-    @classmethod
-    def _GenesisPointDef_stream_deserialize(cls, f):
-        outpoint = COutPoint.stream_deserialize(f)
-        return cls(outpoint)
-
-    def stream_serialize(self, f):
-        super(TxOutGenesisPointDef, self).stream_serialize(f)
-        self.outpoint.stream_serialize(f)
-
-@make_GenesisPointDef_subclass
-class ScriptPubKeyGenesisPointDef(GenesisPointDef):
-    """Generic genesis outpoint defined as a spend of a specific scriptPubKey
-
-    Note that to prove this requires having the previous transaction available.
-    (can be avoided by verifying signatures)
-    """
-    __slots__ = ['scriptPubKey']
-    TYPE = b'\x02'
-
-    # FIXME: add below
-    # max_height = int # maximum block height the scriptPubKey is valid for
-
-    def __init__(self, scriptPubKey):
-        object.__setattr__(self, 'scriptPubKey', scriptPubKey)
-
-    @classmethod
-    def _GenesisPointDef_stream_deserialize(cls, f):
-        scriptPubKey = bitcoin.core.serialize.BytesSerializer.stream_deserialize(f)
-        scriptPubKey = bitcoin.core.script.CScript(scriptPubKey)
-        return cls(scriptPubKey)
-
-    def stream_serialize(self, f):
-        super(ScriptPubKeyGenesisPointDef, self).stream_serialize(f)
-        bitcoin.core.serialize.BytesSerializer.stream_serialize(self.scriptPubKey, f)
-
-
 class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     """The low-level definition of a color
 
@@ -159,7 +83,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     """
     __slots__ = ['version',
                  'prevdef_hash',
-                 'genesis_outpoint_set',
+                 'genesis_outpoints',
+                 'genesis_scriptPubKeys',
                  'birthdate_blockheight',
                  'stegkey',
                 ]
@@ -167,7 +92,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
     VERSION = 0
 
     def __init__(self, *,
-                 genesis_outpoint_set=None,
+                 genesis_outpoints=None,
+                 genesis_scriptPubKeys=None,
                  prevdef_hash=b'\x00'*32,
                  version=0,
                  birthdate_blockheight=0,
@@ -178,11 +104,17 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
             stegkey = os.urandom(16)
         assert len(stegkey) == 16
 
-        if genesis_outpoint_set is None:
-            genesis_outpoint_set = set()
-        genesis_outpoint_set = set(genesis_outpoint_set)
+        # FIXME: should be a merbinner tree
+        if genesis_outpoints is None:
+            genesis_outpoints = {}
+        genesis_outpoints = dict(genesis_outpoints)
 
-        object.__setattr__(self, 'genesis_outpoint_set', genesis_outpoint_set)
+        if genesis_scriptPubKeys is None:
+            genesis_scriptPubKeys = {}
+        genesis_scriptPubKeys = set()
+
+        object.__setattr__(self, 'genesis_outpoints', genesis_outpoints)
+        object.__setattr__(self, 'genesis_scriptPubKeys', genesis_scriptPubKeys)
         object.__setattr__(self, 'prevdef_hash', prevdef_hash)
         object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
         object.__setattr__(self, 'stegkey', stegkey)
@@ -197,8 +129,8 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
         prevdef_hash = bitcoin.core.serialize.ser_read(f, 32)
 
-        genesis_outpoint_set = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
-        return cls(genesis_outpoint_set=genesis_outpoint_set, prevdef_hash=prevdef_hash,
+        genesis_outpoints = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
+        return cls(genesis_outpoints=genesis_outpoints, prevdef_hash=prevdef_hash,
                    version=version, birthdate_blockheight=birthdate_blockheight)
 
     def stream_serialize(self, f):
@@ -206,9 +138,9 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
         f.write(struct.pack(b'<I', self.birthdate_blockheight))
         assert len(self.prevdef_hash) == 32
         f.write(self.prevdef_hash)
-        sorted_genesis_outpoint_set = sorted(self.genesis_outpoint_set) # to get consistent hashes
+        sorted_genesis_outpoints = sorted(self.genesis_outpoints) # to get consistent hashes
         # FIXME: get serialization class right
-        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_outpoint_set, f)
+        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_outpoints, f)
 
     def nSequence_pad(self, outpoint):
         """Derive the nSequence pad from a given outpoint
@@ -301,140 +233,117 @@ class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
 
         return color_qtys_out
 
-    def prune(self, relevant_genesis_outs):
-        pruned_genesis_outpoint_set = self.genesis_outpoint_set.prove_contains(relevant_genesis_outs)
 
-        # Note how we allow subclasses to work!
-        return self.__class__(self.prevdef_hash, pruned_genesis_outpoint_set)
-
+class ColorProofValidationError(Exception):
+    pass
 
 class ColorProof:
-    """Proof that one or more outpoint's are a certain color
+    """Prove that a specific outpoint is colored"""
 
-    Contains all transactions required to prove all relevant color moves back
-    to the genesis points. Also manages updates to the proof as
-    blocks/transactions are added/removed.
-    """
+    __slots__ = ['outpoint', 'colordef']
 
-    __slots__ = ['version', 'colordef', 'all_outputs', 'unspent_outputs', 'txs']
+    def _validate(self):
+        raise NotImplementedError
 
-    def __init__(self, colordef, txs=()):
+    def validate(self):
+        """Validate the proof"""
+
+        remaining_proofs = (self,)
+        while remaining_proofs:
+            next_remaining_proofs = []
+
+            for proof in remaining_proofs:
+                next_remaining_proofs.extend(proof._validate())
+
+            remaining_proofs = next_remaining_proofs
+
+
+class GenesisOutPointColorProof(ColorProof):
+    """Prove that an outpoint is colored because it is a genesis outpoint"""
+    __slots__ = []
+
+    def __init__(self, colordef, outpoint):
+        self.outpoint = outpoint
         self.colordef = colordef
 
-        self.all_outputs = {}
-        self.unspent_outputs = {}
+    @property
+    def qty(self):
+        return self.colordef.genesis_outpoints[self.outpoint]
 
-        self.txs = smartcolors.core.util.DagTuple()
-        for tx in txs:
-            self.addtx(tx)
+    def _validate(self):
+        if self.outpoint not in self.colordef.genesis_outpoints:
+            raise ColorProofValidationError('outpoint not in genesis outpoints')
 
-    def addtx(self, tx):
-        """Add a new tx to the proof
+        return ()
 
-        self.outputs will be updated
-        """
+class GenesisScriptPubKeyColorProof(ColorProof):
+    """Prove that an outpoint is colored because it is a genesis scriptPubKey"""
+    __slots__ = ['tx']
 
-        tx_relevant = False
 
-        new_colored_outs = set()
+    def __init__(self, colordef, outpoint, tx):
+        self.outpoint = outpoint
+        self.colordef = colordef
+        self.tx = tx
 
-        # Check tx outputs for genesis points defined by outpoint
-        for i in range(len(tx.vout)):
-            genesis_point = TxOutGenesisPointDef(COutPoint(tx.GetHash(), i))
+    @property
+    def qty(self):
+        # FIXME: add/remove msbdrop padding should be part of the colordef to
+        # make it more generic
+        return remove_msbdrop_value_padding(self.tx.vout[self.outpoint.n].nValue)
 
-            if genesis_point in self.colordef.genesis_outpoint_set:
-                color_qty = remove_msbdrop_value_padding(tx.vout[i].nValue)
-                self.all_outputs[genesis_point.outpoint] = color_qty
-                self.unspent_outputs[genesis_point.outpoint] = color_qty
+    def _validate(self):
+        if self.tx.GetHash() != self.outpoint.hash or not (0 <= self.outpoint.n < len(self.tx.vout)):
+            raise ColorProofValidationError('outpoint does not match transaction')
 
-                tx_relevant = True
+        if self.tx.vout[self.outpoint.n] not in self.colordef.genesis_scriptPubKeys:
+            raise ColorProofValidationError('scriptPubKey not a genesis scriptPubKey')
 
-        # Check inputs for spends of genesis scriptPubKeys
-        # FIXME: implement
+        return ()
 
-        # Apply the kernel.
-        #
-        # FIXME: Consider how addtx() should behave if we apply it to the same
-        # tx twice. If all colored inputs are known and we apply the same
-        # transaction twice the inputs to that transaction will be missing from
-        # the unspent outputs set and the kernel will do nothing; no change.
-        # However if only some colored inputs are known, addtx() is called,
-        # then more colored inputs become known, the second addtx() could end
-        # up adding the same output to the unspent_outputs list twice, with the
-        # second time having a different amount of color.
-        txhash = tx.GetHash()
+class TransferredColorProof(ColorProof):
+    """Prove that an outpoint is colored because color was transferred to it"""
 
-        color_qtys = self.colordef.apply_kernel(tx, self.unspent_outputs)
+    __slots__ = ['tx', 'prevout_proofs',
+                 '__cached_qty']
 
-        for i, color_qty in enumerate(color_qtys):
-            if color_qty is not None:
-                outpoint = COutPoint(txhash, i)
+    def __init__(self, colordef, outpoint, tx, prevout_proofs):
+        self.outpoint = outpoint
+        self.colordef = colordef
+        self.tx = tx
+        self.prevout_proofs = prevout_proofs
 
-                self.all_outputs[outpoint] = color_qty
-                self.unspent_outputs[outpoint] = color_qty
+    def calc_qty(self):
+        """Calculate the quantity of color assigned to this outpoint"""
+        color_qty_by_outpoint = {}
 
-        # remove spent colored outputs from unspent
-        for txin in tx.vin:
-            spent = self.unspent_outputs.pop(txin.prevout, None)
+        for prevout, colorproof in self.prevout_proofs.items():
+            color_qty_by_outpoint[prevout] = colorproof.qty
+            color_qty_out = self.colordef.apply_kernel(self.tx, color_qty_by_outpoint)
 
-            if spent is not None:
-                tx_relevant = True
+            try:
+                qty = color_qty_out[self.outpoint.n]
+            except IndexError:
+                    raise ColorProofValidationError('outpoint does not match transaction; n out of bounds')
 
-        if tx_relevant:
-            self.txs = self.txs.append(tx)
+            if qty is None:
+                raise ColorProofValidationError('no color assigned to outpoint')
+            else:
+                return qty
 
-    def removetx(self, tx):
-        """Remove a transaction from the proof
+    @property
+    def qty(self):
+        try:
+            return self.__cached_qty
+        except AttributeError:
+            self.__cached_qty = self.calc_qty()
+            return self.__cached_qty
 
-        Other transactions may be removed as well
-        """
+    def _validate(self):
+        yield from self.prevout_proofs.values()
 
-        # FIXME: Fair amount of thought involved in getting this right; easiest
-        # approach would be to just re-addtx() all txs in order for a
-        # ref-implementation to write tests against.
-        raise NotImplementedError
+        if self.tx.GetHash() != self.outpoint.hash:
+            raise ColorProofValidationError('outpoint does not match transaction; wrong txid')
 
-    def prove_outputs(self, outputs):
-        """Prove a subset of outputs
-
-        Returns a new ColorProof
-        """
-
-        genesis_outputs = set()
-        outputs = set(outputs)
-        relevant_txs = insertion_ordered_set()
-
-        while outputs:
-            next_outputs = set()
-
-            for output in outputs:
-                tx = self.txs[output]
-
-                relevant_txs.add(tx)
-
-                for txin in tx:
-                    if txin is a_genesis_output:
-                        genesis_outputs.add(txin.prevout)
-
-                        # may need to add supporting txs, e.g. for scriptPubKey-based geneis outputs
-
-                    else:
-                        # otherwise keep backtracking
-                        next_outputs.add(txin.prevout)
-
-            outputs = next_outputs
-
-        # We can prune our color def to only include the genesis outputs we
-        # found.
-        pruned_colordef = self.colordef.prune(genesis_outputs)
-
-        # Note how this ensures subclasses work!
-        return self.__class__(pruned_colordef, relevant_txs)
-
-    def create_bloom_filter(self):
-        """Return a bloom filter that will match on transactions spending colored outputs proven
-
-        Use self.addtx() to add the transactions to the proof.
-        """
-        raise NotImplementedError
+        self.calc_qty()
 

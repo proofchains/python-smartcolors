@@ -128,31 +128,6 @@ class Test_MSB_Drop_padding(unittest.TestCase):
         T(  0b100, 0b1111,
            0b11001)
 
-class Test_GenesisPointDef(unittest.TestCase):
-    def test_bad_deserialization(self):
-        with self.assertRaises(bitcoin.core.serialize.SerializationError):
-            GenesisPointDef.deserialize(b'\x00')
-        with self.assertRaises(bitcoin.core.serialize.SerializationError):
-            GenesisPointDef.deserialize(b'\x00'*100)
-
-    def test_serialization(self):
-        tx_gpt = TxOutGenesisPointDef(COutPoint(b'\x00'*32, 0xffffffff))
-
-        self.assertEqual(tx_gpt.serialize(),
-                x('010000000000000000000000000000000000000000000000000000000000000000ffffffff'))
-
-        script_gpt = ScriptPubKeyGenesisPointDef(CScript())
-        self.assertEqual(script_gpt.serialize(), x('0200'))
-
-        tx_gpt2 = GenesisPointDef.deserialize(
-                        x('010000000000000000000000000000000000000000000000000000000000000000ffffffff'))
-        self.assertEqual(tx_gpt2.outpoint, tx_gpt.outpoint)
-
-        script_gpt2 = GenesisPointDef.deserialize(
-                        x('0200'))
-        self.assertEqual(script_gpt2.scriptPubKey, script_gpt.scriptPubKey)
-
-
 class Test_ColorDef_kernel(unittest.TestCase):
     def make_color_tx(self, kernel, input_nSequences, output_amounts):
         """Make a test transaction"""
@@ -289,203 +264,76 @@ class Test_ColorDef_kernel(unittest.TestCase):
         color_out = hdr.apply_kernel(tx, {tx.vin[0].prevout:2})
         self.assertEqual(color_out, [2, None])
 
-class Test_ColorProof(unittest.TestCase):
-    def test_simple_addtx(self):
-        """addtx() with single input single output chain of txs"""
-        genesis_tx = CTransaction(vin=(),
-                                  vout=[CTxOut(add_msbdrop_value_padding(1))])
+class Test_GenesisOutPointColorProof(unittest.TestCase):
+    def test_qty(self):
+        outpoint = COutPoint(b'\xaa'*32, n=0)
+        cdef = ColorDef(genesis_outpoints={outpoint:42})
+        cproof = GenesisOutPointColorProof(cdef, outpoint)
 
-        txout_genesis_point = TxOutGenesisPointDef(COutPoint(genesis_tx.GetHash(), 0))
+        self.assertEqual(cproof.qty, 42)
 
-        cdef = ColorDef(genesis_outpoint_set=[txout_genesis_point])
+    def test_validate(self):
+        outpoint = COutPoint(b'\xaa'*32, n=0)
+        cdef = ColorDef(genesis_outpoints={outpoint:42})
+        cproof = GenesisOutPointColorProof(cdef, COutPoint())
 
-        cproof = ColorProof(cdef)
+        with self.assertRaises(ColorProofValidationError):
+            cproof.validate()
 
-        # Proof starts with no outputs proven and no txs
-        self.assertEqual(len(cproof.all_outputs), 0)
-        self.assertEqual(len(cproof.unspent_outputs), 0)
-        self.assertFalse(cproof.txs)
+class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
+    def test_qty(self):
+        genesis_scriptPubKey = CScript([b'hello world!'])
 
-        # the genesis tx adds one output to all, and one to unspent
-        genesis_outpoint = COutPoint(genesis_tx.GetHash(), 0)
-        expected_all_outputs = {genesis_outpoint: 1}
-        expected_unspent_outputs = {genesis_outpoint: 1}
-        expected_txs = [genesis_tx]
+        tx = CTransaction([], [CTxOut(42 << 1, genesis_scriptPubKey)])
+        cdef = ColorDef(genesis_scriptPubKeys=[genesis_scriptPubKey])
 
-        cproof.addtx(genesis_tx)
+        cproof = GenesisScriptPubKeyColorProof(cdef, COutPoint(tx.GetHash(), 0), tx)
 
-        self.assertEqual(list(cproof.txs), expected_txs)
-        self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
+        self.assertEqual(cproof.qty, 42)
 
-        # spend the genesis output, creating a new output
-        tx2 = CTransaction(vin=[CTxIn(prevout=genesis_outpoint,
-                                      nSequence=0xffffffff ^ cdef.nSequence_pad(genesis_outpoint))],
-                           vout=[CTxOut(add_msbdrop_value_padding(1))])
+    def test_validate(self):
+        genesis_scriptPubKey = CScript([b'hello world!'])
 
-        tx2_colored_outpoint = COutPoint(tx2.GetHash(), 0)
-        expected_all_outputs[tx2_colored_outpoint] = 1
-        del expected_unspent_outputs[genesis_outpoint]
-        expected_unspent_outputs[tx2_colored_outpoint] = 1
-        expected_txs.append(tx2)
+        tx = CTransaction([], [CTxOut(42 << 1, genesis_scriptPubKey)])
+        cdef = ColorDef(genesis_scriptPubKeys=[genesis_scriptPubKey])
 
-        cproof.addtx(tx2)
+        # Outpoint doesn't match transaction
+        cproof = GenesisScriptPubKeyColorProof(cdef, COutPoint(), tx)
+        with self.assertRaises(ColorProofValidationError):
+            cproof.validate()
 
-        self.assertEqual(list(cproof.txs), expected_txs)
-        self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
+        # scriptPubKey not a genesis scriptPubKey
+        tx = CTransaction([], [CTxOut(42 << 1, CScript([b'wrong']))])
+        cproof = GenesisScriptPubKeyColorProof(cdef, COutPoint(tx.GetHash(), 0), tx)
+        with self.assertRaises(ColorProofValidationError):
+            cproof.validate()
 
-        # again
-        tx3 = CTransaction(vin=[CTxIn(prevout=tx2_colored_outpoint,
-                                      nSequence=0xffffffff ^ cdef.nSequence_pad(tx2_colored_outpoint))],
-                           vout=[CTxOut(add_msbdrop_value_padding(1))])
+class Test_TransferredColorProof(unittest.TestCase):
+    def test_qty(self):
+        outpoint = COutPoint(b'\xaa'*32, n=0)
+        cdef = ColorDef(genesis_outpoints={outpoint:42})
+        genesis_cproof = GenesisOutPointColorProof(cdef, outpoint)
 
-        tx3_colored_outpoint = COutPoint(tx3.GetHash(), 0)
-        expected_all_outputs[tx3_colored_outpoint] = 1
-        del expected_unspent_outputs[tx2_colored_outpoint]
-        expected_unspent_outputs[tx3_colored_outpoint] = 1
-        expected_txs.append(tx3)
+        tx = CTransaction([CTxIn(genesis_cproof.outpoint,
+                                 nSequence=(0xFFFFFFFF ^ cdef.nSequence_pad(genesis_cproof.outpoint)))],
+                          [CTxOut(42 << 1)])
+        tx_cproof = TransferredColorProof(cdef, COutPoint(tx.GetHash(), 0), tx,
+                                          {genesis_cproof.outpoint:genesis_cproof})
 
-        cproof.addtx(tx3)
+        self.assertEqual(tx_cproof.qty, 42)
 
-        self.assertEqual(list(cproof.txs), expected_txs)
-        self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
+    def test_validate(self):
+        outpoint = COutPoint(b'\xaa'*32, n=0)
+        cdef = ColorDef(genesis_outpoints={outpoint:42})
+        genesis_cproof = GenesisOutPointColorProof(cdef, outpoint)
 
-        # destroy the color, resulting in no unspent colored outputs
-        tx4 = CTransaction(vin=[CTxIn(prevout=tx3_colored_outpoint,
-                                      nSequence=0 ^ cdef.nSequence_pad(tx3_colored_outpoint))],
-                           vout=[CTxOut(add_msbdrop_value_padding(1))]) # won't be colored
+        tx = CTransaction([CTxIn(genesis_cproof.outpoint,
+                                 nSequence=(0xFFFFFFFF ^ cdef.nSequence_pad(genesis_cproof.outpoint)))],
+                          [CTxOut(42 << 1)])
+        tx_cproof = TransferredColorProof(cdef, COutPoint(tx.GetHash(), 0), tx,
+                                          {genesis_cproof.outpoint:genesis_cproof})
 
-        del expected_unspent_outputs[tx3_colored_outpoint]
-        expected_txs.append(tx4)
+        tx_cproof.validate()
 
-        cproof.addtx(tx4)
+        # FIXME: need invalid tests too
 
-        self.assertEqual(list(cproof.txs), expected_txs)
-        self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
-
-        # test the test!
-        self.assertEqual(expected_unspent_outputs, {})
-        self.assertEqual(len(expected_all_outputs), 3)
-
-    def test_complex_addtx(self):
-        """addtx() with complex, randomized, multi-input multi-output set of transactions"""
-
-        # create a set of n genesis transactions each with (1, m) genesis outputs
-        n = 100
-        m = 10
-        genesis_txs = []
-        genesis_outpoints = []
-        sum_genesis_color_qty = 0
-        expected_all_outputs = {}
-        expected_unspent_outputs = {}
-        expected_txs = []
-
-        for i in range(n):
-            vin = ()
-
-            vout = []
-            for i in range(random.randint(1, m)):
-                # randomly chosen amount of color
-                color_qty = random.randint(1, 2**32)
-                sum_genesis_color_qty += color_qty
-
-                txout = CTxOut(add_msbdrop_value_padding(color_qty))
-                vout.append(txout)
-
-            genesis_tx = CTransaction(vin, vout)
-            genesis_txs.append(genesis_tx)
-
-            # create genesis points from those outputs
-            for i, txout in enumerate(genesis_tx.vout):
-                outpoint = COutPoint(genesis_tx.GetHash(), i)
-                color_qty = remove_msbdrop_value_padding(txout.nValue)
-
-                expected_all_outputs[outpoint] = color_qty
-                expected_unspent_outputs[outpoint] = color_qty
-
-                txout_genesis_point = TxOutGenesisPointDef(outpoint)
-                genesis_outpoints.append(txout_genesis_point)
-
-        cdef = ColorDef(genesis_outpoint_set=genesis_outpoints)
-
-        cproof = ColorProof(cdef)
-        for genesis_tx in genesis_txs:
-            cproof.addtx(genesis_tx)
-            expected_txs.append(genesis_tx)
-
-        # unspent and all outputs should be identical
-        self.assertEqual(cproof.all_outputs, cproof.unspent_outputs)
-
-        # check how much color there is
-        self.assertEqual(sum(cproof.unspent_outputs.values()), sum_genesis_color_qty)
-
-        # Create n transactions spending the colored outputs, conserving color.
-        n = 100
-        for i in range(n):
-            # spend a random subset of all unspent outputs
-            unspent_subset = random.sample(cproof.unspent_outputs.items(),
-                                           min(len(cproof.unspent_outputs), random.randint(1, 32)))
-
-            sum_in = sum(color_qty for outpoint, color_qty in unspent_subset)
-            self.assertTrue(sum_in > 0)
-
-            vin = [CTxIn(outpoint, nSequence=0xffffffff ^ cdef.nSequence_pad(outpoint))
-                      for outpoint, color_qty in unspent_subset]
-
-            # Create outputs.
-            #
-            # Random # of outputs created such that inputs ~= outputs, subject
-            # to precision limitations on color qty.
-            vout = []
-            num_outs = random.randint(0, 31)
-            remaining_color = sum_in
-            sum_out = 0
-            for j in range(num_outs):
-                self.assertTrue(remaining_color >= 0)
-                if remaining_color == 0:
-                    break
-                color_qty = min(remaining_color, random.randint(1, sum_in // num_outs))
-                if j == num_outs-1:
-                    color_qty = remaining_color
-                remaining_color -= color_qty
-                sum_out += color_qty
-                txout = CTxOut(add_msbdrop_value_padding(color_qty))
-                vout.append(txout)
-
-            # ensure there is always at least one output
-            if remaining_color:
-                txout = CTxOut(add_msbdrop_value_padding(remaining_color))
-                vout.append(txout)
-
-            else:
-                assert len(vout) > 0
-
-            tx = CTransaction(vin, vout)
-            cproof.addtx(tx)
-            expected_txs.append(tx)
-
-
-            for vin in tx.vin:
-                del expected_unspent_outputs[vin.prevout]
-                self.assertNotIn(vin.prevout, cproof.unspent_outputs)
-
-            for i, txout in enumerate(tx.vout):
-                outpoint = COutPoint(tx.GetHash(), i)
-                color_qty = remove_msbdrop_value_padding(txout.nValue)
-
-                expected_all_outputs[outpoint] = color_qty
-                self.assertEqual(cproof.all_outputs[outpoint], color_qty)
-
-                expected_unspent_outputs[outpoint] = color_qty
-                self.assertEqual(cproof.unspent_outputs[outpoint], color_qty)
-
-
-        self.assertEqual(list(cproof.txs), expected_txs)
-        self.assertEqual(cproof.all_outputs, expected_all_outputs)
-        self.assertEqual(cproof.unspent_outputs, expected_unspent_outputs)
-
-        # final check how much color there is
-        self.assertEqual(sum(cproof.unspent_outputs.values()), sum_genesis_color_qty)

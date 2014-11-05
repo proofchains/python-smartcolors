@@ -13,7 +13,6 @@ import os
 import struct
 
 import bitcoin.core.serialize
-import smartcolors.core.util
 
 from bitcoin.core import COutPoint, CTransaction, b2lx
 from bitcoin.core.script import CScript

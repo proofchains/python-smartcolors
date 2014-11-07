@@ -67,4 +67,5 @@ Secondly the least significant bit turns this feature on and off.
 Unit Tests
 ==========
 
+python3 -m unittest discover -s proofmarshal
 python3 -m unittest discover -s smartcolors

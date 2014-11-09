@@ -13,8 +13,10 @@ import os
 import struct
 
 import bitcoin.core.serialize
+import proofmarshal
+import proofmarshal.merbinnertree
 
-from bitcoin.core import COutPoint, CTransaction, b2lx
+from bitcoin.core import COutPoint, CTransaction, b2lx, x, b2x, Hash
 from bitcoin.core.script import CScript
 
 
@@ -73,73 +75,100 @@ def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue=0):
 
         return (1 << i) | (unpadded_nValue << 1) | 0b1
 
+class GenesisOutPointsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
+    HASH_HMAC_KEY = x('d8497e1258c3f8e747341cb361676cee')
 
-class ColorDef(bitcoin.core.serialize.ImmutableSerializable):
+    key_serialize = lambda self, ctx, key: ctx.write_bytes('key', key.serialize(), 36)
+    key_deserialize = lambda self, ctx: COutPoint.deserialize(ctx.read_bytes('key', 36))
+
+    value_serialize = lambda self, ctx, value: ctx.write_varuint('value', value)
+    value_deserialize = lambda self, ctx: ctx.read_varuint('value')
+
+    key_gethash = lambda self, key: key.GetHash()
+    value_getsum = lambda self, value: value
+
+    sum_serialize = lambda self, ctx, sum: ctx.write_varuint('sum', sum)
+
+
+class GenesisScriptPubKeysMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
+    HASH_HMAC_KEY = x('d431b155684582c6e0eef8b38d62321e')
+
+    key_serialize = lambda self, ctx, key: ctx.write_bytes('key', key)
+    key_deserialize = lambda self, ctx: CScript(ctx.read_bytes('key'))
+
+    value_serialize = lambda self, ctx, value: None
+    value_deserialize = lambda self, ctx: None
+
+    key_gethash = lambda self, key: Hash(key)
+
+
+class ColorDef(proofmarshal.ImmutableProof):
     """The low-level definition of a color
 
     Commits to all valid genesis points for this color in a merkle tree. This
     lets even very large color definitions be used efficiently by SPV clients.
     """
     __slots__ = ['version',
-                 'prevdef_hash',
-                 'genesis_outpoints',
-                 'genesis_scriptPubKeys',
                  'birthdate_blockheight',
                  'stegkey',
+                 'genesis_outpoints',
+                 'genesis_scriptPubKeys',
+                 '_cached_hash',
                 ]
 
-    VERSION = 0
+    HASH_HMAC_KEY = x('1d8801c1323b4cc5d1b48b289d35aad0')
+
+    VERSION = 1
+    STEGKEY_LEN = 16
 
     def __init__(self, *,
                  genesis_outpoints=None,
                  genesis_scriptPubKeys=None,
-                 prevdef_hash=b'\x00'*32,
-                 version=0,
                  birthdate_blockheight=0,
                  stegkey=None):
-        object.__setattr__(self, 'version', version)
 
         if stegkey is None:
-            stegkey = os.urandom(16)
-        assert len(stegkey) == 16
+            stegkey = os.urandom(self.STEGKEY_LEN)
+        assert len(stegkey) == self.STEGKEY_LEN
 
         # FIXME: should be a merbinner tree
         if genesis_outpoints is None:
             genesis_outpoints = {}
-        genesis_outpoints = dict(genesis_outpoints)
+        genesis_outpoints = GenesisOutPointsMerbinnerTree(genesis_outpoints)
 
         if genesis_scriptPubKeys is None:
-            genesis_scriptPubKeys = {}
-        genesis_scriptPubKeys = set()
+            genesis_scriptPubKeys = set()
+        genesis_scriptPubKeys = {scriptPubKey:None for scriptPubKey in genesis_scriptPubKeys}
+        genesis_scriptPubKeys = GenesisScriptPubKeysMerbinnerTree(genesis_scriptPubKeys)
 
         object.__setattr__(self, 'genesis_outpoints', genesis_outpoints)
         object.__setattr__(self, 'genesis_scriptPubKeys', genesis_scriptPubKeys)
-        object.__setattr__(self, 'prevdef_hash', prevdef_hash)
         object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
         object.__setattr__(self, 'stegkey', stegkey)
 
-    @classmethod
-    def stream_deserialize(cls, f):
-        version = struct.unpack(b"<I", bitcoin.core.serialize.ser_read(f,4))[0]
-        if version != cls.VERSION:
-            raise SerializationError('wrong version: got %d; expected %d' % (version, cls.VERSION))
+    def _ctx_deserialize(self, ctx):
+        version = ctx.read_varuint('version')
+        if version != self.VERSION:
+            raise SerializationError('wrong version: got %d; expected %d' % (version, self.VERSION))
 
-        birthdate_blockheight = struct.unpack(b"<I", bitcoin.core.serialize.ser_read(f,4))[0]
+        birthdate_blockheight = ctx.read_varuint('birthdate_blockheight')
+        object.__setattr__(self, 'birthdate_blockheight', birthdate_blockheight)
 
-        prevdef_hash = bitcoin.core.serialize.ser_read(f, 32)
+        stegkey = ctx.read_bytes('stegkey', self.STEGKEY_LEN)
+        object.__setattr__(self, 'stegkey', stegkey)
 
-        genesis_outpoints = bitcoin.core.serialize.VectorSerializer.stream_deserialize(GenesisPointDef, f)
-        return cls(genesis_outpoints=genesis_outpoints, prevdef_hash=prevdef_hash,
-                   version=version, birthdate_blockheight=birthdate_blockheight)
+        genesis_outpoints = ctx.read_obj('genesis_outpoints', GenesisOutPointsMerbinnerTree)
+        object.__setattr__(self, 'genesis_outpoints', genesis_outpoints)
 
-    def stream_serialize(self, f):
-        f.write(struct.pack(b'<I', self.version))
-        f.write(struct.pack(b'<I', self.birthdate_blockheight))
-        assert len(self.prevdef_hash) == 32
-        f.write(self.prevdef_hash)
-        sorted_genesis_outpoints = sorted(self.genesis_outpoints) # to get consistent hashes
-        # FIXME: get serialization class right
-        bitcoin.core.serialize.VectorSerializer.stream_serialize(TxOutGenesisPointDef, sorted_genesis_outpoints, f)
+        genesis_scriptPubKeys = ctx.read_obj('genesis_scriptPubKeys', GenesisScriptPubKeysMerbinnerTree)
+        object.__setattr__(self, 'genesis_scriptPubKeys', genesis_scriptPubKeys)
+
+    def _ctx_serialize(self, ctx):
+        ctx.write_varuint('version', self.VERSION)
+        ctx.write_varuint('birthdate_blockheight', self.birthdate_blockheight)
+        ctx.write_bytes('stegkey', self.stegkey, self.STEGKEY_LEN)
+        ctx.write_obj('genesis_outpoints', self.genesis_outpoints)
+        ctx.write_obj('genesis_scriptPubKeys', self.genesis_scriptPubKeys)
 
     def nSequence_pad(self, outpoint):
         """Derive the nSequence pad from a given outpoint

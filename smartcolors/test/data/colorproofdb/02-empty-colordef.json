@@ -1,0 +1,21 @@
+[
+["Empty colordef should result in no genesis anything"],
+
+["load_colordef",
+ "0100000000000000000000000000000000000000",
+ "30d7c08db9998dc607367eac0afea2b8aedf5816ab9ee80cc03ed35d271b6c54"],
+
+["check_genesis_outpoints",
+ {}
+],
+
+["check_genesis_scriptPubKeys",
+ {}
+],
+
+["check_outpoints",
+ {}
+],
+
+[""]
+]

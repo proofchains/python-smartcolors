@@ -41,18 +41,18 @@ class ColorProofDb:
         # FIXME: add support for pruned definitions
         assert not colordef.is_pruned()
 
-        if colordef not in self.colordefs:
+        if colordef in self.colordefs:
             raise ValueError('colordef already in database')
 
         self.colordefs.add(colordef)
 
-        for genesis_outpoint in colordef.genesis_outpoints:
-            outpoint_colordef_set = self.genesis_outpoints.setdefault(genesis_outpoint.outpoint, set())
+        for genesis_outpoint, qty in colordef.genesis_outpoints.items():
+            outpoint_colordef_set = self.genesis_outpoints.setdefault(genesis_outpoint, set())
 
             # Ensures the colordef doesn't have the same outpoint multiple
             # times.
             assert colordef not in outpoint_colordef_set
-            outpoint_colordef_set.add(genesis_outpoint)
+            outpoint_colordef_set.add(colordef)
 
         for genesis_scriptPubKey in colordef.genesis_scriptPubKeys:
             scriptPubKey_colordef_set = self.genesis_scriptPubKeys.setdefault(genesis_scriptPubKey, set())
@@ -60,7 +60,7 @@ class ColorProofDb:
             # Ensures the colordef doesn't have the same scriptPubKey multiple
             # times.
             assert colordef not in scriptPubKey_colordef_set
-            scriptPubKey_colordef_set.add(genesis_scriptPubKey)
+            scriptPubKey_colordef_set.add(colordef)
 
 
     def addtx(self, tx):

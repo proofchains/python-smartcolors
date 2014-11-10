@@ -1,0 +1,21 @@
+[
+["Colordef with a single genesis output"],
+
+["load_colordef",
+ "01000000000000000000000000000000000001efbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeadde000000000100",
+ "2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0"],
+
+["check_genesis_outpoints",
+ {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0": ["2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0"]}
+],
+
+["check_genesis_scriptPubKeys",
+ {}
+],
+
+["check_outpoints",
+ {}
+],
+
+[""]
+]

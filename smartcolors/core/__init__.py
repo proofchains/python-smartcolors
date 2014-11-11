@@ -379,21 +379,19 @@ class TransferredColorProof(ColorProof):
 
     def calc_qty(self):
         """Calculate the quantity of color assigned to this outpoint"""
-        color_qty_by_outpoint = {}
+        color_qty_by_outpoint = {prevout:colorproof.qty for prevout, colorproof in self.prevout_proofs.items()}
 
-        for prevout, colorproof in self.prevout_proofs.items():
-            color_qty_by_outpoint[prevout] = colorproof.qty
-            color_qty_out = self.colordef.apply_kernel(self.tx, color_qty_by_outpoint)
+        color_qty_out = self.colordef.apply_kernel(self.tx, color_qty_by_outpoint)
 
-            try:
-                qty = color_qty_out[self.outpoint.n]
-            except IndexError:
-                    raise ColorProofValidationError('outpoint does not match transaction; n out of bounds')
+        try:
+            qty = color_qty_out[self.outpoint.n]
+        except IndexError:
+                raise ColorProofValidationError('outpoint does not match transaction; n out of bounds')
 
-            if qty is None:
-                raise ColorProofValidationError('no color assigned to outpoint')
-            else:
-                return qty
+        if qty is None:
+            raise ColorProofValidationError('no color assigned to outpoint')
+        else:
+            return qty
 
     @property
     def qty(self):

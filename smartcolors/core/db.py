@@ -87,14 +87,11 @@ class ColorProofDb:
 
         txid = tx.GetHash()
 
-        # Check if any of the txouts are genesis points
+        # Create genesis scriptPubKey proofs for the txouts
         for i, txout in enumerate(tx.vout):
             outpoint = COutPoint(txid, i)
-
-            # Genesis scriptPubKeys
-            for colordef in self.genesis_scriptPubKeys.get(outpoint, set()):
-                # Ditto
-                colorproof = GenesisOutPointColorProof(colordef, outpoint)
+            for colordef in self.genesis_scriptPubKeys.get(txout.scriptPubKey, set()):
+                colorproof = GenesisScriptPubKeyColorProof(colordef, outpoint, tx)
                 self.colored_outpoints \
                     .setdefault(outpoint, {}) \
                     .setdefault(colordef, set()) \
@@ -103,18 +100,12 @@ class ColorProofDb:
         # Find colored inputs and sort the associated proofs by colordef
         prevout_proof_sets_by_colordef = {}
         for txin in tx.vin:
-            try:
-                outpoint_colorproofs_by_colordef = self.colored_outpoints[txin.prevout]
-            except KeyError:
-                continue
-
-            for colordef, colorproofs in outpoint_colorproofs_by_colordef.items():
+            for colordef, colorproofs in self.colored_outpoints.get(txin.prevout, {}).items():
                 for colorproof in colorproofs:
                     colordef_outpoints = prevout_proof_sets_by_colordef.setdefault(colorproof.colordef, {})
                     outpoint_proofs = colordef_outpoints.setdefault(colorproof.outpoint, set())
 
                     outpoint_proofs.add(colorproof)
-
 
         # With the prevout proofs sorted into colordef we can now apply the
         # appropriate color kernel for each one.
@@ -173,6 +164,7 @@ class ColorProofDb:
 
                 outpoint = COutPoint(txid, i)
                 colorproof = TransferredColorProof(colordef, outpoint, tx, prevout_proofs)
+                assert colorproof.qty == qty
                 self.colored_outpoints \
                     .setdefault(outpoint, {}) \
                     .setdefault(colordef, set()) \

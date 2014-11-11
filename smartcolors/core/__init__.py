@@ -108,8 +108,7 @@ class ColorDef(proofmarshal.ImmutableProof):
     Commits to all valid genesis points for this color in a merkle tree. This
     lets even very large color definitions be used efficiently by SPV clients.
     """
-    __slots__ = ['version',
-                 'birthdate_blockheight',
+    __slots__ = ['birthdate_blockheight',
                  'stegkey',
                  'genesis_outpoints',
                  'genesis_scriptPubKeys',

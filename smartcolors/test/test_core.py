@@ -132,10 +132,11 @@ class Test_ColorDef_kernel(unittest.TestCase):
     def make_color_tx(self, kernel, input_nSequences, output_amounts):
         """Make a test transaction"""
         vin = []
-        for i, decrypted_nSequence in enumerate(input_nSequences):
+        for i, nSequence in enumerate(input_nSequences):
             outpoint = COutPoint(n=i)
-            nSequence_pad = kernel.nSequence_pad(outpoint)
-            txin = CTxIn(outpoint, nSequence=(decrypted_nSequence ^ nSequence_pad))
+            nSequence <<= 16
+            nSequence |= 0x7E
+            txin = CTxIn(outpoint, nSequence=nSequence)
             vin.append(txin)
 
         vout = [CTxOut(add_msbdrop_value_padding(nValue, 0)) for nValue in output_amounts]
@@ -315,7 +316,7 @@ class Test_TransferredColorProof(unittest.TestCase):
         genesis_cproof = GenesisOutPointColorProof(cdef, outpoint)
 
         tx = CTransaction([CTxIn(genesis_cproof.outpoint,
-                                 nSequence=(0xFFFFFFFF ^ cdef.nSequence_pad(genesis_cproof.outpoint)))],
+                                 nSequence=(0xFE | (0xFFFFFF00 & (0xFFFF0000 ^ cdef.nSequence_pad(genesis_cproof.outpoint)))))],
                           [CTxOut(42 << 1)])
         tx_cproof = TransferredColorProof(cdef, COutPoint(tx.GetHash(), 0), tx,
                                           {genesis_cproof.outpoint:genesis_cproof})
@@ -328,7 +329,7 @@ class Test_TransferredColorProof(unittest.TestCase):
         genesis_cproof = GenesisOutPointColorProof(cdef, outpoint)
 
         tx = CTransaction([CTxIn(genesis_cproof.outpoint,
-                                 nSequence=(0xFFFFFFFF ^ cdef.nSequence_pad(genesis_cproof.outpoint)))],
+                                 nSequence=(0xFE | (0xFFFFFF00 & (0xFFFF0000 ^ cdef.nSequence_pad(genesis_cproof.outpoint)))))],
                           [CTxOut(42 << 1)])
         tx_cproof = TransferredColorProof(cdef, COutPoint(tx.GetHash(), 0), tx,
                                           {genesis_cproof.outpoint:genesis_cproof})

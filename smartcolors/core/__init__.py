@@ -196,30 +196,64 @@ class ColorDef(proofmarshal.ImmutableProof):
 
         # Which outputs the color in is being sent to is specified by
         # nSequence.
-        decrypted_nSequence = self.nSequence_pad(txin.prevout) ^ txin.nSequence
-        for j in range(min(len(tx.vout), 32)):
-            # An output is marked as colored if the corresponding bit
-            # in nSequence is set to one. This is chosen to allow
-            # standard transactions with standard-looking nSquence's to
-            # move color.
-            if remaining_color_qty_in and (decrypted_nSequence >> j) & 0b1 == 1:
-                # Mark the output as being colored if it hasn't been
-                # already.
-                if color_qtys_out[j] is None:
-                    color_qtys_out[j] = 0
 
-                # Color is allocated to outputs "bucket-style", where each
-                # colored input adds to colored outputs until the output is
-                # "full". As color_qtys_out is modified in place the allocation
-                # is stateful - a previous txin can change where the next txin
-                # sends its quantity of color.
-                max_color_qty_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
-                color_transferred = min(remaining_color_qty_in, max_color_qty_out - color_qtys_out[j])
-                color_qtys_out[j] += color_transferred
-                remaining_color_qty_in -= color_transferred
+        # bits 6-0 are used to determine what kernel to use
+        kernel_num = txin.nSequence & 0x7F
 
-                assert color_transferred >= 0
-                assert remaining_color_qty_in >= 0
+        # bit #7 turns nSequence decryption on and off; important in case a
+        # future CHECKSIG or something can create signatures that don't sign
+        # the prevout
+        decrypted_nSequence = txin.nSequence
+        if txin.nSequence & 0b10000000:
+            decrypted_nSequence ^= self.nSequence_pad(txin.prevout)
+
+        if kernel_num == 0x7F:
+            # PUSHDATA routing
+            #
+            # Gets 0xFF so it can hide amongst standard transactions. Other
+            # three bytes are XORed with per-colordef stegkey, which means even
+            # if they're all 1's you get per-color distingishment
+            raise NotImplementedError
+
+        elif kernel_num == 0x7E:
+            # nSequence routing
+            #
+            # One less than max-int, again to hide amongst standard
+            # transactions. (proposed "always-use-nLockTime" standard)
+
+            # bits 15-8 are qty shift (exponent)
+            qty_shift = (decrypted_nSequence >> 8) & 0xFF
+
+            assert qty_shift == 0 # FIXME
+
+            # bits 31-16 are colored/uncolored data
+            colored_bitfield = (decrypted_nSequence >> 16) & 0xFFFF
+            for j in range(min(len(tx.vout), 16)):
+                # An output is marked as colored if the corresponding bit
+                # in nSequence is set to one. This is chosen to allow
+                # standard transactions with standard-looking nSquence's to
+                # move color.
+                if remaining_color_qty_in and (colored_bitfield >> j) & 0b1 == 1:
+                    # Mark the output as being colored if it hasn't been
+                    # already.
+                    if color_qtys_out[j] is None:
+                        color_qtys_out[j] = 0
+
+                    # Color is allocated to outputs "bucket-style", where each
+                    # colored input adds to colored outputs until the output is
+                    # "full". As color_qtys_out is modified in place the allocation
+                    # is stateful - a previous txin can change where the next txin
+                    # sends its quantity of color.
+                    max_color_qty_out = remove_msbdrop_value_padding(tx.vout[j].nValue)
+                    color_transferred = min(remaining_color_qty_in, max_color_qty_out - color_qtys_out[j])
+                    color_qtys_out[j] += color_transferred
+                    remaining_color_qty_in -= color_transferred
+
+                    assert color_transferred >= 0
+                    assert remaining_color_qty_in >= 0
+
+        else:
+            raise NotImplementedError
 
         # Any remaining color that hasn't been sent to an output by the txin is
         # simply destroyed. This ensures all color transfers happen explicitly,

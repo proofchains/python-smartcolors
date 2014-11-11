@@ -42,7 +42,8 @@ def run_proof_test(self, test_name):
             actual_genesis_outpoints['%s:%d' % (b2lx(outpoint.hash), outpoint.n)] = \
                     list(sorted(b2x(colordef.hash) for colordef in colordef_set))
 
-        self.assertDictEqual(expected_genesis_outpoints, actual_genesis_outpoints)
+        self.assertDictEqual(expected_genesis_outpoints, actual_genesis_outpoints,
+                msg='%s: check_genesis_outpoints(): mismatch' % test_name)
 
     @define_action
     def check_genesis_scriptPubKeys(expected_genesis_scriptPubKeys):
@@ -51,11 +52,30 @@ def run_proof_test(self, test_name):
             actual_genesis_scriptPubKeys['%s' % b2x(scriptPubKey)] = \
                     list(sorted(b2x(colordef.hash) for colordef in colordef_set))
 
-        self.assertDictEqual(expected_genesis_scriptPubKeys, actual_genesis_scriptPubKeys)
+        self.assertDictEqual(expected_genesis_scriptPubKeys, actual_genesis_scriptPubKeys,
+                msg='%s: check_genesis_scriptPubKeys(): mismatch' % test_name)
 
     @define_action
-    def check_outpoints(expected_outpoints):
-        pass
+    def check_outpoint_qtys(expected_outpoints):
+        actual_outpoints = {}
+        for outpoint, color_qtys_by_colordef in colordb.colored_outpoints.items():
+            json_outpoint = '%s:%d' % (b2lx(outpoint.hash), outpoint.n)
+            actual_color_qtys_by_colordef = actual_outpoints.setdefault(json_outpoint, {})
+
+            for colordef, colorproofs in color_qtys_by_colordef.items():
+                colorproofs = tuple(colorproofs)
+                if len(colorproofs) != 1:
+                    import pdb; pdb.set_trace()
+                colorproof = colorproofs[0]
+                actual_color_qtys_by_colordef[b2x(colordef.hash)] = colorproof.qty
+
+        self.assertDictEqual(expected_outpoints, actual_outpoints,
+                msg='%s: check_outpoint_qtys(): mismatch' % test_name)
+
+    @define_action
+    def addtx(hex_tx):
+        tx = CTransaction.deserialize(x(hex_tx))
+        colordb.addtx(tx)
 
     for action, *args in load_test_vectors(test_name):
         if action not in actions:

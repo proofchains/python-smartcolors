@@ -13,8 +13,45 @@
  {}
 ],
 
-["check_outpoints",
- {}
+["check_outpoint_qtys",
+ {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0": 1}}
+],
+
+["Move the color to another output"],
+["addtx", "0100000001efbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeadde00000000007e00ffff0102000000000000000000000000"],
+
+["check_outpoint_qtys",
+ {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0": 1},
+  "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0":1}
+ }
+],
+
+["Move it again"],
+["addtx", "010000000181331a5da8bbfa56f861106eb0540a79b140923d00244b8ced2a93dcda7fdc4300000000007e00ffff0102000000000000000000000000"],
+
+["check_outpoint_qtys",
+ {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0": 1},
+  "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0":1},
+  "1fae4926bbb729af1e1d22647499d1e445874126b7cec90336c7ee6437c18837:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0":1}
+ }
+],
+
+["Destroy it"],
+["addtx", "01000000013788c13764eec73603c9ceb726418745e4d1997464221d1eaf29b7bb2649ae1f00000000007e0000000102000000000000000000000000"],
+["check_outpoint_qtys",
+ {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0": 1},
+  "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0":1},
+  "1fae4926bbb729af1e1d22647499d1e445874126b7cec90336c7ee6437c18837:0":
+     {"2ab1feb0a32f402ef9c815bffa40265b857d6e442ab8c5e64cd40e65a367c2e0":1}
+ }
 ],
 
 [""]

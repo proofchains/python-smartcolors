@@ -17,6 +17,12 @@ import bitcoin.core.serialize
 from bitcoin.core import COutPoint, CTransaction, b2lx
 from bitcoin.core.script import CScript
 
+from smartcolors.core import (
+        GenesisOutPointColorProof,
+        GenesisScriptPubKeyColorProof,
+        TransferredColorProof
+)
+
 class ColorProofDb:
     """Database of ColorProofs
 
@@ -54,6 +60,15 @@ class ColorProofDb:
             assert colordef not in outpoint_colordef_set
             outpoint_colordef_set.add(colordef)
 
+            # Genesis outpoints don't need the transactions themselves to be
+            # proven, so create the corresponding proofs and add them to the
+            # colored_outpoints
+            colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
+            self.colored_outpoints \
+                .setdefault(genesis_outpoint, {}) \
+                .setdefault(colordef, set()) \
+                .add(colorproof)
+
         for genesis_scriptPubKey in colordef.genesis_scriptPubKeys:
             scriptPubKey_colordef_set = self.genesis_scriptPubKeys.setdefault(genesis_scriptPubKey, set())
 
@@ -76,17 +91,6 @@ class ColorProofDb:
         for i, txout in enumerate(tx.vout):
             outpoint = COutPoint(txid, i)
 
-            # Check for genesis txouts
-            for colordef in self.genesis_outpoints.get(outpoint, set()):
-                # Slightly convoluted as we're adding an item to a set inside a
-                # dict inside a dict, and all three of those things might not
-                # exist yet.
-                colorproof = GenesisOutPointColorProof(colordef, outpoint)
-                self.colored_outpoints \
-                    .setdefault(outpoint, {}) \
-                    .setdefault(colordef, set()) \
-                    .add(colorproof)
-
             # Genesis scriptPubKeys
             for colordef in self.genesis_scriptPubKeys.get(outpoint, set()):
                 # Ditto
@@ -100,15 +104,17 @@ class ColorProofDb:
         prevout_proof_sets_by_colordef = {}
         for txin in tx.vin:
             try:
-                colorproofs = self.colored_outpoints[txin.prevout]
+                outpoint_colorproofs_by_colordef = self.colored_outpoints[txin.prevout]
             except KeyError:
                 continue
 
-            for colorproof in colorproofs:
-                colordef_outpoints = prevout_proof_sets_by_colordef.setdefault(colorproof.colordef, {})
-                outpoint_proofs = colordef_outpoints.setdefault(colorproof.outpoint, set())
+            for colordef, colorproofs in outpoint_colorproofs_by_colordef.items():
+                for colorproof in colorproofs:
+                    colordef_outpoints = prevout_proof_sets_by_colordef.setdefault(colorproof.colordef, {})
+                    outpoint_proofs = colordef_outpoints.setdefault(colorproof.outpoint, set())
 
-                outpoint_proofs.add(colorproof)
+                    outpoint_proofs.add(colorproof)
+
 
         # With the prevout proofs sorted into colordef we can now apply the
         # appropriate color kernel for each one.
@@ -149,7 +155,7 @@ class ColorProofDb:
                     else:
                         return 3
 
-                best_proof = next(iter(sorted(prevout_proofs, key=proof_priority_key)))
+                best_proof = next(iter(sorted(prevout_proof_set, key=proof_priority_key)))
 
                 # Make sure that the color quantities proven by all proofs are
                 # identical. (for now)
@@ -160,8 +166,13 @@ class ColorProofDb:
             # Now we can finally apply the kernel and start creating proofs for
             # the color movement for each colored output
             color_qty_by_outpoint = {outpoint:colorproof.qty for outpoint, colorproof in prevout_proofs.items()}
-            for i, qty in colordef.apply_kernel(tx, color_qty_by_outpoint):
-                colorproof = TransferredColorProof(colordef, COutPoint(txid, i), tx, prevout_proofs)
+            for i, qty in enumerate(colordef.apply_kernel(tx, color_qty_by_outpoint)):
+
+                if qty is None:
+                    continue # Output isn't colored!
+
+                outpoint = COutPoint(txid, i)
+                colorproof = TransferredColorProof(colordef, outpoint, tx, prevout_proofs)
                 self.colored_outpoints \
                     .setdefault(outpoint, {}) \
                     .setdefault(colordef, set()) \

@@ -75,11 +75,37 @@ def add_msbdrop_value_padding(unpadded_nValue, minimum_nValue=0):
 
         return (1 << i) | (unpadded_nValue << 1) | 0b1
 
+# Serialization for CTransactions and their component parts
+class CTransactionSerializer(proofmarshal.Serializer):
+    HASH_HMAC_KEY = x('4668df91fe332d65378cc758958d701d')
+
+    @classmethod
+    def ctx_serialize(cls, tx, ctx):
+        ctx.write_bytes('tx', tx.serialize())
+
+    @classmethod
+    def ctx_deserialize(cls, ctx):
+        serialized_tx = ctx.read_bytes('tx')
+        return CTransaction.deserialize(serialized_tx)
+
+class COutPointSerializer(proofmarshal.Serializer):
+    HASH_HMAC_KEY = x('eac9aef052700336a94accea6a883e59')
+
+    @classmethod
+    def ctx_serialize(cls, outpoint, ctx):
+        ctx.write_bytes('outpoint', outpoint.serialize(), 36)
+
+    @classmethod
+    def ctx_deserialize(cls, ctx):
+        serialized_outpoint = ctx.read_bytes('outpoint', 36)
+        return COutPoint.deserialize(serialized_outpoint)
+
+
 class GenesisOutPointsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
     HASH_HMAC_KEY = x('d8497e1258c3f8e747341cb361676cee')
 
-    key_serialize = lambda self, ctx, key: ctx.write_bytes('key', key.serialize(), 36)
-    key_deserialize = lambda self, ctx: COutPoint.deserialize(ctx.read_bytes('key', 36))
+    key_serialize = lambda self, ctx, key: ctx.write_obj('key', key, COutPointSerializer)
+    key_deserialize = lambda self, ctx: ctx.read_obj('key', COutPointSerializer)
 
     value_serialize = lambda self, ctx, value: ctx.write_varuint('value', value)
     value_deserialize = lambda self, ctx: ctx.read_varuint('value')

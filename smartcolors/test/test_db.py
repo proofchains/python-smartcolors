@@ -73,6 +73,13 @@ def run_proof_test(self, test_name):
                 msg='%s: assert_outpoint_qtys(): mismatch' % test_name)
 
     @define_action
+    def assert_state_hash(expected_state_hash):
+        """Assert a hash of the entire ColorProofDb state"""
+        actual_state_hash = colordb.calc_state_hash()
+        self.assertEqual(expected_state_hash, b2x(actual_state_hash),
+                msg='%s: assert_state_hash(): mismatch' % test_name)
+
+    @define_action
     def addtx(hex_tx):
         tx = CTransaction.deserialize(x(hex_tx))
         colordb.addtx(tx)
@@ -84,8 +91,6 @@ def run_proof_test(self, test_name):
         actions[action](*args)
 
 class Test_ColorProofDb(unittest.TestCase):
-
-
     def test(self):
         """Data-driven tests"""
         for proof_test in sorted(os.listdir(test_data_path('colorproofdb/'))):

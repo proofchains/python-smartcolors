@@ -9,12 +9,13 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import hashlib
 import os
 import struct
 
 import bitcoin.core.serialize
 
-from bitcoin.core import COutPoint, CTransaction, b2lx
+from bitcoin.core import COutPoint, CTransaction, b2lx, Hash
 from bitcoin.core.script import CScript
 
 from smartcolors.core import (
@@ -169,3 +170,51 @@ class ColorProofDb:
                     .setdefault(outpoint, {}) \
                     .setdefault(colordef, set()) \
                     .add(colorproof)
+
+
+    def calc_state_hash(self):
+        """Calculate a hash representing the state of the database"""
+
+        def hash_dict(d, *, key_hash_func, value_hash_func):
+            midstate = hashlib.sha256()
+            # sorted() will return the dict items sorted by the has of each key
+            for key_hash, value_hash in sorted((key_hash_func(key), value_hash_func(value)) for key, value in d.items()):
+                midstate.update(key_hash)
+                midstate.update(value_hash)
+            return midstate.digest()
+
+        def hash_set(objs, obj_hash_func=lambda obj: obj.hash):
+            obj_hashes = [obj_hash_func(obj) for obj in objs]
+            midstate = hashlib.sha256()
+            for obj_hash in sorted(obj_hashes):
+                midstate.update(obj_hash)
+            return midstate.digest()
+
+        midstate = hashlib.sha256()
+
+        colordefs_digest = hash_set(self.colordefs)
+        midstate.update(colordefs_digest)
+
+        genesis_outpoints_digest = \
+                hash_dict(self.genesis_outpoints,
+                          key_hash_func=lambda outpoint: Hash(outpoint.serialize()),
+                          value_hash_func=lambda colordef_set: hash_set(colordef_set))
+        midstate.update(genesis_outpoints_digest)
+
+        genesis_scriptPubKeys_digest = \
+                hash_dict(self.genesis_scriptPubKeys,
+                          key_hash_func=lambda scriptPubKey: Hash(scriptPubKey),
+                          value_hash_func=lambda colordef_set: hash_set(colordef_set))
+        midstate.update(genesis_scriptPubKeys_digest)
+
+        def hash_colorproof_set_by_colordef_dict(d):
+            return hash_dict(d, key_hash_func=lambda colordef: colordef.hash,
+                                value_hash_func=lambda colorproof_set: hash_set(colorproof_set))
+
+        colored_outpoints_digest = \
+                hash_dict(self.colored_outpoints,
+                          key_hash_func=lambda outpoint: Hash(outpoint.serialize()),
+                          value_hash_func=lambda d: hash_colorproof_set_by_colordef_dict(d))
+        midstate.update(colored_outpoints_digest)
+
+        return midstate.digest()

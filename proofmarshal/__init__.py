@@ -84,8 +84,9 @@ class StreamSerializationContext(SerializationContext):
         self.fd.write(value)
 
     def write_obj(self, attr_name, value, serialization_class=None):
-        assert serialization_class is None
-        value.ctx_serialize(self)
+        if serialization_class is None:
+            serialization_class = value.__class__
+        serialization_class.ctx_serialize(value, self)
 
 class StreamDeserializationContext(DeserializationContext):
     def __init__(self, fd):

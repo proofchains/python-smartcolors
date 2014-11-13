@@ -326,10 +326,42 @@ class ColorDef(proofmarshal.ImmutableProof):
 class ColorProofValidationError(Exception):
     pass
 
-class ColorProof:
+class ColorProof(proofmarshal.ImmutableProof):
     """Prove that a specific outpoint is colored"""
 
-    __slots__ = ['outpoint', 'colordef']
+    __slots__ = ['_cached_hash', 'colordef', 'outpoint']
+
+    HASH_HMAC_KEY = x('b96dae8e52cb124d01804353736a8384')
+
+    COLORPROOF_TYPE = None
+    COLORPROOF_CLASSES_BY_TYPE = {}
+
+    VERSION = 1
+
+    def _ctx_serialize(self, ctx):
+        assert self.COLORPROOF_TYPE is not None
+        ctx.write_varuint('colorproof_type', self.COLORPROOF_TYPE)
+        ctx.write_varuint('version', self.VERSION)
+        ctx.write_obj('colordef', self.colordef)
+        ctx.write_obj('outpoint', self.outpoint, COutPointSerializer)
+
+    def _ctx_deserialize(self, ctx):
+        version = ctx.read_varuint('version')
+        if version != self.VERSION:
+            raise SerializationError('wrong version: got %d; expected %d' % (version, self.VERSION))
+
+        colordef = ctx.read_obj('colordef', ColorDef)
+        object.__setattr__(self, 'colordef', colordef)
+        outpoint = ctx.read_obj('outpoint', COutPointSerializer)
+        object.__setattr__(self, 'outpoint', outpoint)
+
+    @classmethod
+    def ctx_deserialize(cls, ctx):
+        colorproof_type = ctx.read_varuint('colorproof_type')
+        cls = ColorProof.COLORPROOF_CLASSES_BY_TYPE[colorproof_type]
+        self = cls.__new__(cls)
+        self._ctx_deserialize(ctx)
+        return self
 
     def _validate(self):
         raise NotImplementedError
@@ -346,14 +378,20 @@ class ColorProof:
 
             remaining_proofs = next_remaining_proofs
 
+def register_colorproof_class(cls):
+    ColorProof.COLORPROOF_CLASSES_BY_TYPE[cls.COLORPROOF_TYPE] = cls
+    return cls
 
+@register_colorproof_class
 class GenesisOutPointColorProof(ColorProof):
     """Prove that an outpoint is colored because it is a genesis outpoint"""
     __slots__ = []
 
+    COLORPROOF_TYPE = 1
+
     def __init__(self, colordef, outpoint):
-        self.outpoint = outpoint
-        self.colordef = colordef
+        object.__setattr__(self, 'colordef', colordef)
+        object.__setattr__(self, 'outpoint', outpoint)
 
     @property
     def qty(self):
@@ -365,15 +403,27 @@ class GenesisOutPointColorProof(ColorProof):
 
         return ()
 
+@register_colorproof_class
 class GenesisScriptPubKeyColorProof(ColorProof):
     """Prove that an outpoint is colored because it is a genesis scriptPubKey"""
     __slots__ = ['tx']
 
+    COLORPROOF_TYPE = 2
 
     def __init__(self, colordef, outpoint, tx):
-        self.outpoint = outpoint
-        self.colordef = colordef
-        self.tx = tx
+        object.__setattr__(self, 'colordef', colordef)
+        object.__setattr__(self, 'outpoint', outpoint)
+        object.__setattr__(self, 'tx', tx)
+
+    def _ctx_serialize(self, ctx):
+        super()._ctx_serialize(ctx)
+
+        ctx.write_obj('tx', self.tx, CTransactionSerializer)
+
+    def _ctx_deserialize(self, ctx):
+        super()._ctx_deserialize(ctx)
+        tx = ctx.read_obj('tx', CTransactionSerializer)
+        object.__setattr__(self, 'tx', tx)
 
     @property
     def qty(self):
@@ -390,17 +440,51 @@ class GenesisScriptPubKeyColorProof(ColorProof):
 
         return ()
 
+
+class PrevoutProofsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
+    HASH_HMAC_KEY = x('486a3b9f0cc1adc7f0f7f3e388b89dbc')
+
+    key_serialize = lambda self, ctx, key: ctx.write_obj('key', key, COutPointSerializer)
+    key_deserialize = lambda self, ctx: ctx.read_obj('key', COutPointSerializer)
+
+    value_serialize = lambda self, ctx, value: ctx.write_obj('value', value)
+    value_deserialize = lambda self, ctx: ctx.read_obj('value', ColorProof)
+
+    key_gethash = lambda self, key: COutPointSerializer.calc_hash(key)
+    value_getsum = lambda self, value: value.qty
+
+    sum_serialize = lambda self, ctx, sum: ctx.write_varuint('sum', sum)
+
+@register_colorproof_class
 class TransferredColorProof(ColorProof):
     """Prove that an outpoint is colored because color was transferred to it"""
 
     __slots__ = ['tx', 'prevout_proofs',
-                 '__cached_qty']
+                 '_cached_qty']
+
+    COLORPROOF_TYPE = 3
 
     def __init__(self, colordef, outpoint, tx, prevout_proofs):
-        self.outpoint = outpoint
-        self.colordef = colordef
-        self.tx = tx
-        self.prevout_proofs = prevout_proofs
+        object.__setattr__(self, 'colordef', colordef)
+        object.__setattr__(self, 'outpoint', outpoint)
+        object.__setattr__(self, 'tx', tx)
+        prevout_proofs = PrevoutProofsMerbinnerTree(prevout_proofs)
+        object.__setattr__(self, 'prevout_proofs', prevout_proofs)
+
+    def _ctx_serialize(self, ctx):
+        super()._ctx_serialize(ctx)
+
+        ctx.write_obj('tx', self.tx, CTransactionSerializer)
+        ctx.write_obj('prevout_proofs', self.prevout_proofs)
+
+    def _ctx_deserialize(self, ctx):
+        super()._ctx_deserialize(ctx)
+
+        tx = ctx.read_obj('tx', CTransactionSerializer)
+        object.__setattr__(self, 'tx', tx)
+
+        prevout_proofs = ctx.read_obj('prevout_proofs', PrevoutProofsMerbinnerTree)
+        object.__setattr__(self, 'prevout_proofs', prevout_proofs)
 
     def calc_qty(self):
         """Calculate the quantity of color assigned to this outpoint"""
@@ -421,10 +505,10 @@ class TransferredColorProof(ColorProof):
     @property
     def qty(self):
         try:
-            return self.__cached_qty
+            return self._cached_qty
         except AttributeError:
-            self.__cached_qty = self.calc_qty()
-            return self.__cached_qty
+            object.__setattr__(self, '_cached_qty', self.calc_qty())
+            return self._cached_qty
 
     def _validate(self):
         yield from self.prevout_proofs.values()

@@ -294,6 +294,26 @@ class Test_ColorDef_kernel(unittest.TestCase):
         self.assertEqual(color_out, [2, None])
 
 class Test_GenesisOutPointColorProof(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('b96dae8e52cb124d01804353736a8384'), buf, hashlib.sha256).digest()
+
+        genesis_outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+
+        colordef = ColorDef.deserialize(x('0100ec746756751d8ac6e9345f9050e1565f013ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a0000000080e497d01200'))
+
+        colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
+
+        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
+
+        expected_hash = h(x('01') + # ColorProof type
+                          x('01') + # version
+                          colordef.hash +
+                          COutPointSerializer.calc_hash(genesis_outpoint))
+
+        self.assertEqual(b2x(expected_hash), b2x(colorproof.hash))
+
     def test_qty(self):
         outpoint = COutPoint(b'\xaa'*32, n=0)
         cdef = ColorDef(genesis_outpoints={outpoint:42})
@@ -310,6 +330,29 @@ class Test_GenesisOutPointColorProof(unittest.TestCase):
             cproof.validate()
 
 class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('b96dae8e52cb124d01804353736a8384'), buf, hashlib.sha256).digest()
+
+        genesis_scriptPubKey = CScript([b'hello world!'])
+        colordef = ColorDef.deserialize(x('01006bbd59a72d6a9b5629b0162a4ab90f3b00010d0c68656c6c6f20776f726c6421'))
+
+        tx = CTransaction.deserialize(x('01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4d04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73ffffffff0100f2052a01000000434104678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5fac00000000'))
+
+        outpoint = COutPoint(tx.GetHash(), 0)
+        colorproof = GenesisScriptPubKeyColorProof(colordef, outpoint, tx)
+
+        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
+
+        expected_hash = h(x('02') + # ColorProof type
+                          x('01') + # version
+                          colordef.hash +
+                          COutPointSerializer.calc_hash(outpoint) +
+                          CTransactionSerializer.calc_hash(tx))
+
+        self.assertEqual(b2x(expected_hash), b2x(colorproof.hash))
+
     def test_qty(self):
         genesis_scriptPubKey = CScript([b'hello world!'])
 
@@ -338,6 +381,47 @@ class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
             cproof.validate()
 
 class Test_TransferredColorProof(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('b96dae8e52cb124d01804353736a8384'), buf, hashlib.sha256).digest()
+
+        genesis_outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
+        genesis_scriptPubKey = CScript([b'hello world!'])
+
+        # colordef has the above genesis outpoint, and the above genesis
+        # scriptPubKey
+        colordef = ColorDef.deserialize(x('0100e21a56b106c2b720ed82c603471b5d55013ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a0000000080e497d012010d0c68656c6c6f20776f726c6421'))
+
+        tx_genesis_scriptPubKey = \
+                CTransaction([CTxIn(COutPoint(lx('0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098'), 0))],
+                             [CTxOut(1 << 1, genesis_scriptPubKey)])
+
+        # So we can create valid color proofs for both
+        outpoint_colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
+        scriptPubKey_colorproof = GenesisScriptPubKeyColorProof(colordef, genesis_outpoint, tx_genesis_scriptPubKey)
+
+        # And spend both in a valid transaction (er, well, we don't have satoshi's private key...)
+        tx = CTransaction([CTxIn(genesis_outpoint, nSequence=0xFFFF007E),
+                           CTxIn(COutPoint(tx_genesis_scriptPubKey.GetHash(),0), nSequence=0xFFFF007E)],
+                          [CTxOut(1 << 1)]) # we kinda destroyed a lot of color there...
+
+        outpoint = COutPoint(tx.GetHash(), 0)
+        colorproof = TransferredColorProof(colordef, outpoint, tx,
+                                           prevout_proofs={tx.vin[0].prevout:outpoint_colorproof,
+                                                           tx.vin[1].prevout:scriptPubKey_colorproof})
+
+        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
+
+        expected_hash = h(x('03') + # ColorProof type
+                          x('01') + # version
+                          colordef.hash +
+                          COutPointSerializer.calc_hash(outpoint) +
+                          CTransactionSerializer.calc_hash(tx) +
+                          colorproof.prevout_proofs.hash)
+
+        self.assertEqual(b2x(expected_hash), b2x(colorproof.hash))
+
     def test_qty(self):
         outpoint = COutPoint(b'\xaa'*32, n=0)
         cdef = ColorDef(genesis_outpoints={outpoint:42})

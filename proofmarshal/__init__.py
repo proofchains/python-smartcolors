@@ -148,6 +148,11 @@ class JsonSerializationContext:
         hex_value = binascii.hexlify(value).decode('utf8')
         self.pairs[attr_name] = hex_value
 
+    def write_obj(self, attr_name, obj, serialization_class=None):
+        if serialization_class is None:
+            serialization_class = obj.__class__
+        json_obj = serialization_class.json_serialize(obj)
+        self.pairs[attr_name] = json_obj
 
 class JsonDeserializationContext:
     """deserialize a human-readable JSON-compatible attribute-value pairs"""
@@ -160,6 +165,7 @@ class JsonDeserializationContext:
 
     def read_bytes(self, attr_name, expected_length):
         return binascii.unhexlify(self.pairs[attr_name].encode('utf8'))
+
 
 class HashSerializationContext(BytesSerializationContext):
     """Serialization context for calculating hashes of objects
@@ -232,7 +238,7 @@ class Serializer:
     def json_serialize(cls, self):
         """Serialize to JSON-compatible attribute-value pairs"""
         ctx = JsonSerializationContext()
-        self.ctx_serialize(ctx)
+        cls.ctx_serialize(self, ctx)
         return ctx.pairs
 
     @classmethod

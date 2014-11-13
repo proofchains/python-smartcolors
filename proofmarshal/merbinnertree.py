@@ -46,7 +46,7 @@ class MerbinnerTree(proofmarshal.ImmutableProof, dict):
                 # Leaf node
                 ctx.write_varuint('type', 1)
 
-                key, value, sum = items[0]
+                keyhash, key, value, sum = items[0]
                 self.key_serialize(ctx, key)
                 self.value_serialize(ctx, value)
 
@@ -59,15 +59,14 @@ class MerbinnerTree(proofmarshal.ImmutableProof, dict):
                 # Sort items into left and right sides
                 left_items = []
                 right_items = []
-                for key, value, sum in items:
+                for keyhash, key, value, sum in items:
                     # FIXME: detect dup keys here
-                    keyhash = self.key_gethash(key)
                     side = keyhash[depth // 8] >> (7 - depth % 8) & 0b1
 
                     if side:
-                        left_items.append((key, value, sum))
+                        left_items.append((keyhash, key, value, sum))
                     else:
-                        right_items.append((key, value, sum))
+                        right_items.append((keyhash, key, value, sum))
 
                 # Definitely a hack, but if we're hashing, rather than
                 # serializing, we need to create new contexts and do the hmac
@@ -96,7 +95,7 @@ class MerbinnerTree(proofmarshal.ImmutableProof, dict):
 
                 return self.sum_func(left_sum, right_sum)
 
-        items = [(key, value, self.value_getsum(value)) for key, value in self.items()]
+        items = [(self.key_gethash(key), key, value, self.value_getsum(value)) for key, value in self.items()]
 
         final_sum = recurse(ctx, items, 0)
 

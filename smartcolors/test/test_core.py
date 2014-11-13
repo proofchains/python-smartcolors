@@ -156,6 +156,19 @@ class Test_COutPointSerializer(unittest.TestCase):
         expected_hash = h(serialized_outpoint)
         self.assertEqual(b2x(expected_hash), b2x(COutPointSerializer.calc_hash(outpoint)))
 
+class Test_CScriptSerializer(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('3b808252881682adf56f7cc5abc0cb3c'), buf, hashlib.sha256).digest()
+
+        # hash is LE128 length + script
+        expected_hash = h(x('0d') + # LE128 script length
+                          b'\x0chello world!')
+
+        script = CScript(b'\x0chello world!')
+        self.assertEqual(b2x(expected_hash), b2x(CScriptSerializer.calc_hash(script)))
+
 class Test_ColorDef_kernel(unittest.TestCase):
     def make_color_tx(self, kernel, input_nSequences, output_amounts):
         """Make a test transaction"""

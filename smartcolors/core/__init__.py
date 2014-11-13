@@ -100,6 +100,17 @@ class COutPointSerializer(proofmarshal.Serializer):
         serialized_outpoint = ctx.read_bytes('outpoint', 36)
         return COutPoint.deserialize(serialized_outpoint)
 
+class CScriptSerializer(proofmarshal.Serializer):
+    HASH_HMAC_KEY = x('3b808252881682adf56f7cc5abc0cb3c')
+
+    @classmethod
+    def ctx_serialize(cls, script, ctx):
+        ctx.write_bytes('script', script)
+
+    @classmethod
+    def ctx_deserialize(cls, ctx):
+        script_bytes = ctx.read_bytes('script')
+        return CScript(script_bytes)
 
 class GenesisOutPointsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
     HASH_HMAC_KEY = x('d8497e1258c3f8e747341cb361676cee')
@@ -110,7 +121,7 @@ class GenesisOutPointsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
     value_serialize = lambda self, ctx, value: ctx.write_varuint('value', value)
     value_deserialize = lambda self, ctx: ctx.read_varuint('value')
 
-    key_gethash = lambda self, key: key.GetHash()
+    key_gethash = lambda self, key: COutPointSerializer.calc_hash(key)
     value_getsum = lambda self, value: value
 
     sum_serialize = lambda self, ctx, sum: ctx.write_varuint('sum', sum)
@@ -119,13 +130,13 @@ class GenesisOutPointsMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
 class GenesisScriptPubKeysMerbinnerTree(proofmarshal.merbinnertree.MerbinnerTree):
     HASH_HMAC_KEY = x('d431b155684582c6e0eef8b38d62321e')
 
-    key_serialize = lambda self, ctx, key: ctx.write_bytes('key', key)
-    key_deserialize = lambda self, ctx: CScript(ctx.read_bytes('key'))
+    key_serialize = lambda self, ctx, key: ctx.write_obj('key', key, CScriptSerializer)
+    key_deserialize = lambda self, ctx: ctx.read_obj('key', CScriptSerializer)
 
     value_serialize = lambda self, ctx, value: None
     value_deserialize = lambda self, ctx: None
 
-    key_gethash = lambda self, key: Hash(key)
+    key_gethash = lambda self, key: CScriptSerializer.calc_hash(key)
 
 
 class ColorDef(proofmarshal.ImmutableProof):

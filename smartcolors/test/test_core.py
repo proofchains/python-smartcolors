@@ -348,7 +348,7 @@ class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
         expected_hash = h(x('02') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
-                          COutPointSerializer.calc_hash(outpoint) +
+                          x('00') + # n
                           CTransactionSerializer.calc_hash(tx))
 
         self.assertEqual(b2x(expected_hash), b2x(colorproof.hash))
@@ -399,7 +399,7 @@ class Test_TransferredColorProof(unittest.TestCase):
 
         # So we can create valid color proofs for both
         outpoint_colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
-        scriptPubKey_colorproof = GenesisScriptPubKeyColorProof(colordef, genesis_outpoint, tx_genesis_scriptPubKey)
+        scriptPubKey_colorproof = GenesisScriptPubKeyColorProof(colordef, COutPoint(tx_genesis_scriptPubKey.GetHash(),0), tx_genesis_scriptPubKey)
 
         # And spend both in a valid transaction (er, well, we don't have satoshi's private key...)
         tx = CTransaction([CTxIn(genesis_outpoint, nSequence=0xFFFF007E),
@@ -416,7 +416,7 @@ class Test_TransferredColorProof(unittest.TestCase):
         expected_hash = h(x('03') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
-                          COutPointSerializer.calc_hash(outpoint) +
+                          x('00') + # n
                           CTransactionSerializer.calc_hash(tx) +
                           colorproof.prevout_proofs.hash)
 

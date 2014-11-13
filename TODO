@@ -16,3 +16,8 @@ proof is at tx level, that is, a given tx has colored inputs of that colorid
 
 use atomic rename technique to replace old proof with new (if old exists at
 all!)
+
+
+Should proofmarshal save transaction/coutpoint/etc hashes by XORing them
+instead of doing a new hash function? Should provide the same security against
+replacement, and let the original hash be recovered.

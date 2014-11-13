@@ -9,6 +9,8 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import hashlib
+import hmac
 import random
 import unittest
 
@@ -127,6 +129,32 @@ class Test_MSB_Drop_padding(unittest.TestCase):
             0b1111)
         T(  0b100, 0b1111,
            0b11001)
+
+class Test_CTransactionSerializer(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('4668df91fe332d65378cc758958d701d'), buf, hashlib.sha256).digest()
+
+        serialized_tx = x('01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000')
+        tx = CTransaction.deserialize(serialized_tx)
+
+        # hash is LE128 length + serialized_tx
+        expected_hash = h(b'\x86\x01' + serialized_tx)
+        self.assertEqual(b2x(expected_hash), b2x(CTransactionSerializer.calc_hash(tx)))
+
+class Test_COutPointSerializer(unittest.TestCase):
+    def test_hash(self):
+        """Manual test of the hash calculation"""
+        def h(buf):
+            return hmac.HMAC(x('eac9aef052700336a94accea6a883e59'), buf, hashlib.sha256).digest()
+
+        serialized_outpoint = x('3ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a00000000')
+        outpoint = COutPoint.deserialize(serialized_outpoint)
+
+        # hash is LE128 length + serialized_tx
+        expected_hash = h(serialized_outpoint)
+        self.assertEqual(b2x(expected_hash), b2x(COutPointSerializer.calc_hash(outpoint)))
 
 class Test_ColorDef_kernel(unittest.TestCase):
     def make_color_tx(self, kernel, input_nSequences, output_amounts):

@@ -5,15 +5,15 @@
  "01000000000000000000000000000000000001efbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeadde000000000100",
  "18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd"],
 
-["check_genesis_outpoints",
+["assert_genesis_outpoints",
  {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0": ["18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd"]}
 ],
 
-["check_genesis_scriptPubKeys",
+["assert_genesis_scriptPubKeys",
  {}
 ],
 
-["check_outpoint_qtys",
+["assert_outpoint_qtys",
  {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd": 1}}
 ],
@@ -21,7 +21,7 @@
 ["Move the color to another output"],
 ["addtx", "0100000001efbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeadde00000000007e00ffff0102000000000000000000000000"],
 
-["check_outpoint_qtys",
+["assert_outpoint_qtys",
  {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd": 1},
   "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
@@ -32,7 +32,7 @@
 ["Move it again"],
 ["addtx", "010000000181331a5da8bbfa56f861106eb0540a79b140923d00244b8ced2a93dcda7fdc4300000000007e00ffff0102000000000000000000000000"],
 
-["check_outpoint_qtys",
+["assert_outpoint_qtys",
  {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd": 1},
   "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
@@ -44,7 +44,7 @@
 
 ["Destroy it"],
 ["addtx", "01000000013788c13764eec73603c9ceb726418745e4d1997464221d1eaf29b7bb2649ae1f00000000007e0000000102000000000000000000000000"],
-["check_outpoint_qtys",
+["assert_outpoint_qtys",
  {"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0":
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd": 1},
   "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":

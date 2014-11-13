@@ -36,27 +36,27 @@ def run_proof_test(self, test_name):
         colordb.addcolordef(colordef)
 
     @define_action
-    def check_genesis_outpoints(expected_genesis_outpoints):
+    def assert_genesis_outpoints(expected_genesis_outpoints):
         actual_genesis_outpoints = {}
         for outpoint, colordef_set in colordb.genesis_outpoints.items():
             actual_genesis_outpoints['%s:%d' % (b2lx(outpoint.hash), outpoint.n)] = \
                     list(sorted(b2x(colordef.hash) for colordef in colordef_set))
 
         self.assertDictEqual(expected_genesis_outpoints, actual_genesis_outpoints,
-                msg='%s: check_genesis_outpoints(): mismatch' % test_name)
+                msg='%s: assert_genesis_outpoints(): mismatch' % test_name)
 
     @define_action
-    def check_genesis_scriptPubKeys(expected_genesis_scriptPubKeys):
+    def assert_genesis_scriptPubKeys(expected_genesis_scriptPubKeys):
         actual_genesis_scriptPubKeys = {}
         for scriptPubKey, colordef_set in colordb.genesis_scriptPubKeys.items():
             actual_genesis_scriptPubKeys['%s' % b2x(scriptPubKey)] = \
                     list(sorted(b2x(colordef.hash) for colordef in colordef_set))
 
         self.assertDictEqual(expected_genesis_scriptPubKeys, actual_genesis_scriptPubKeys,
-                msg='%s: check_genesis_scriptPubKeys(): mismatch' % test_name)
+                msg='%s: assert_genesis_scriptPubKeys(): mismatch' % test_name)
 
     @define_action
-    def check_outpoint_qtys(expected_outpoints):
+    def assert_outpoint_qtys(expected_outpoints):
         actual_outpoints = {}
         for outpoint, color_qtys_by_colordef in colordb.colored_outpoints.items():
             json_outpoint = '%s:%d' % (b2lx(outpoint.hash), outpoint.n)
@@ -70,7 +70,7 @@ def run_proof_test(self, test_name):
                 actual_color_qtys_by_colordef[b2x(colordef.hash)] = colorproof.qty
 
         self.assertDictEqual(expected_outpoints, actual_outpoints,
-                msg='%s: check_outpoint_qtys(): mismatch' % test_name)
+                msg='%s: assert_outpoint_qtys(): mismatch' % test_name)
 
     @define_action
     def addtx(hex_tx):

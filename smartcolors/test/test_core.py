@@ -305,8 +305,6 @@ class Test_GenesisOutPointColorProof(unittest.TestCase):
 
         colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
 
-        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
-
         expected_hash = h(x('01') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
@@ -342,8 +340,6 @@ class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
 
         outpoint = COutPoint(tx.GetHash(), 0)
         colorproof = GenesisScriptPubKeyColorProof(colordef, outpoint, tx)
-
-        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
 
         expected_hash = h(x('02') + # ColorProof type
                           x('01') + # version
@@ -383,8 +379,6 @@ class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
 class Test_TransferredColorProof(unittest.TestCase):
     def test_hash(self):
         """Manual test of the hash calculation"""
-        def h(buf):
-            return hmac.HMAC(x('b96dae8e52cb124d01804353736a8384'), buf, hashlib.sha256).digest()
 
         genesis_outpoint = COutPoint(lx('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'), 0)
         genesis_scriptPubKey = CScript([b'hello world!'])
@@ -395,7 +389,8 @@ class Test_TransferredColorProof(unittest.TestCase):
 
         tx_genesis_scriptPubKey = \
                 CTransaction([CTxIn(COutPoint(lx('0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098'), 0))],
-                             [CTxOut(1 << 1, genesis_scriptPubKey)])
+                             [CTxOut(1 << 1, genesis_scriptPubKey)],
+                             nLockTime=5) # used to make first bit in merbinner tree collide, and second not collide
 
         # So we can create valid color proofs for both
         outpoint_colorproof = GenesisOutPointColorProof(colordef, genesis_outpoint)
@@ -411,7 +406,45 @@ class Test_TransferredColorProof(unittest.TestCase):
                                            prevout_proofs={tx.vin[0].prevout:outpoint_colorproof,
                                                            tx.vin[1].prevout:scriptPubKey_colorproof})
 
-        # Assuming that genesis_outpoint.hash and colordef.hash are working correctly
+        # The prevout proofs merbinner tree is a relatively complex structure,
+        # so test it explicitly first. Of course, merbinner trees are tested
+        # elsewhere, but this is sufficiently critical that we still should
+        # test it explicitly here.
+        def h(buf):
+            return hmac.HMAC(x('486a3b9f0cc1adc7f0f7f3e388b89dbc'), buf, hashlib.sha256).digest()
+
+        self.assertEqual('f2eea3c6203bebe501c42ac420469afca0cee4e48a67d8754c449b832b1d084c',
+                b2x(COutPointSerializer.calc_hash(tx.vin[0].prevout)))
+        self.assertEqual('aae7c112d92b9dcab3ae78b78884c77e092b94a56941cf05c5f406ef40daf2f2',
+                b2x(COutPointSerializer.calc_hash(tx.vin[1].prevout)))
+
+        # Structure of the merbinner tree is Inner(Inner(Leaf[outpoint], Leaf[script]), Empty]),
+        # which we've brute-forced above explicitly to exercise all the
+        # relevant cases.
+        expected_hash = h(x('02') +
+                          h(x('02') + # Inner node on left side
+                            h(x('01') + # Leaf node, genesis outpoint proof
+                              COutPointSerializer.calc_hash(tx.vin[0].prevout) +
+                              outpoint_colorproof.hash
+                             ) +
+                            x('80e497d012') + # sum for the genesis outpoint leaf, 5,000,000,000 qty of color (!)
+                            h(x('01') + # Leaf node, scriptPubKey proof
+                              COutPointSerializer.calc_hash(tx.vin[1].prevout) +
+                              scriptPubKey_colorproof.hash
+                             ) +
+                            x('01') # sum for the scriptPubKey proof leaf; 1 qty of color
+                           ) +
+                          x('81e497d012') + # sum for the inner node, 5,000,000,001 qty of color
+                          h(x('00')) + # empty node on right side
+                          x('00') # empty nodes have 0 color of course
+                         )
+
+        colorproof.prevout_proofs.calc_hash()
+        self.assertEqual(b2x(expected_hash), b2x(colorproof.prevout_proofs.hash))
+
+        # redefine for the TransferredColorProof hash calculation
+        def h(buf):
+            return hmac.HMAC(x('b96dae8e52cb124d01804353736a8384'), buf, hashlib.sha256).digest()
 
         expected_hash = h(x('03') + # ColorProof type
                           x('01') + # version

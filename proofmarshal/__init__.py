@@ -317,3 +317,8 @@ class ImmutableProof:
         except AttributeError:
             object.__setattr__(self, '_cached_hash', self.calc_hash())
             return self._cached_hash
+
+    def __repr__(self):
+        # FIXME: better way to get a fully qualified name?
+        return '%s.%s(<%s>)' % (self.__class__.__module__, self.__class__.__qualname__,
+                                binascii.hexlify(self.hash).decode('utf8'))

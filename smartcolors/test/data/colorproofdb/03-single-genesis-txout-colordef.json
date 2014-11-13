@@ -18,6 +18,11 @@
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd": 1}}
 ],
 
+["assert_outpoint_proofs",
+ "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef:0",
+ ["2058c8d71069b53de6a58364a75b1a86dd819aba93529ace04baf8fbf389515b"]
+],
+
 ["Move the color to another output"],
 ["addtx", "0100000001efbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeaddeefbeadde00000000007e00ffff0102000000000000000000000000"],
 
@@ -27,6 +32,11 @@
   "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0":
      {"18ba3faab7f52987c34d00bacc0668faa3942fdbfe77773a0162303e9d3b16dd":1}
  }
+],
+
+["assert_outpoint_proofs",
+ "43dc7fdadc932aed8c4b24003d9240b1790a54b06e1061f856fabba85d1a3381:0",
+ ["31c6282ac99602a2728f67b7359b74be1ddd1fac191a065d4dc4d28028b1eaa2"]
 ],
 
 ["Move it again"],
@@ -42,6 +52,13 @@
  }
 ],
 
+["assert_outpoint_proofs",
+ "1fae4926bbb729af1e1d22647499d1e445874126b7cec90336c7ee6437c18837:0",
+ ["dbf0df8dbdc516c8e9642f651dd80aff55145b41ef3d7b382fd41ec9a11c9548"]
+],
+
+["assert_state_hash", "5105a6b1b2e7c6743df7f187a2a62684a9189bd90733133ecdb11711bbd7ca9b"],
+
 ["Destroy it"],
 ["addtx", "01000000013788c13764eec73603c9ceb726418745e4d1997464221d1eaf29b7bb2649ae1f00000000007e0000000102000000000000000000000000"],
 ["assert_outpoint_qtys",
@@ -54,6 +71,7 @@
  }
 ],
 
+["Note how the state hash *does not* change, as no new proofs were created."],
 ["assert_state_hash", "5105a6b1b2e7c6743df7f187a2a62684a9189bd90733133ecdb11711bbd7ca9b"],
 
 [""]

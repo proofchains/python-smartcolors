@@ -20,6 +20,16 @@ from smartcolors.test import test_data_path, load_test_vectors
 def run_proof_test(self, test_name):
     colordb = ColorProofDb()
 
+    def parse_str_outpoint(str_outpoint):
+        """Parse txid:n into a COutPoint"""
+        assert str_outpoint.count(':') == 1
+        hex_txid, str_n = str_outpoint.split(':')
+        return COutPoint(lx(hex_txid), int(str_n))
+
+    def str_outpoint(outpoint):
+        """Turn COutPoint into txid:n formatted string"""
+        return '%s:%d' % (b2lx(outpoint.hash), outpoint.n)
+
     actions = {}
     def define_action(func):
         actions[func.__name__] = func
@@ -39,7 +49,7 @@ def run_proof_test(self, test_name):
     def assert_genesis_outpoints(expected_genesis_outpoints):
         actual_genesis_outpoints = {}
         for outpoint, colordef_set in colordb.genesis_outpoints.items():
-            actual_genesis_outpoints['%s:%d' % (b2lx(outpoint.hash), outpoint.n)] = \
+            actual_genesis_outpoints[str_outpoint(outpoint)] = \
                     list(sorted(b2x(colordef.hash) for colordef in colordef_set))
 
         self.assertDictEqual(expected_genesis_outpoints, actual_genesis_outpoints,
@@ -59,8 +69,7 @@ def run_proof_test(self, test_name):
     def assert_outpoint_qtys(expected_outpoints):
         actual_outpoints = {}
         for outpoint, color_qtys_by_colordef in colordb.colored_outpoints.items():
-            json_outpoint = '%s:%d' % (b2lx(outpoint.hash), outpoint.n)
-            actual_color_qtys_by_colordef = actual_outpoints.setdefault(json_outpoint, {})
+            actual_color_qtys_by_colordef = actual_outpoints.setdefault(str_outpoint(outpoint), {})
 
             for colordef, colorproofs in color_qtys_by_colordef.items():
                 colorproofs = tuple(colorproofs)
@@ -73,11 +82,49 @@ def run_proof_test(self, test_name):
                 msg='%s: assert_outpoint_qtys(): mismatch' % test_name)
 
     @define_action
+    def assert_outpoint_proofs(str_outpoint, expected_proof_hashes):
+        """Assert a specific outpoint has the specified proof(s)"""
+        outpoint = parse_str_outpoint(str_outpoint)
+
+        actual_colorproofs = set()
+        for colordef, colorproof_set in colordb.colored_outpoints[outpoint].items():
+            # check for proofs in more than one colordef
+            assert not actual_colorproofs.intersection(colorproof_set)
+            actual_colorproofs.update(colorproof_set)
+
+        actual_proof_hashes = set(b2x(colorproof.hash) for colorproof in actual_colorproofs)
+        expected_proof_hashes = set(expected_proof_hashes)
+
+        self.assertSetEqual(actual_proof_hashes, expected_proof_hashes,
+                msg='%s: assert_proofs(): mismatch' % test_name)
+
+    @define_action
     def assert_state_hash(expected_state_hash):
         """Assert a hash of the entire ColorProofDb state"""
         actual_state_hash = colordb.calc_state_hash()
         self.assertEqual(expected_state_hash, b2x(actual_state_hash),
                 msg='%s: assert_state_hash(): mismatch' % test_name)
+
+    @define_action
+    def debug_outpoint_proofs(str_outpoint):
+        """Drop into a debugger"""
+        outpoint = parse_str_outpoint(str_outpoint)
+        proofs_by_colordef = colordb.colored_outpoints[outpoint]
+        all_proofs = set()
+        for colorproofs_set in proofs_by_colordef.values():
+            all_proofs.update(colorproofs_set)
+
+        # for when there's just one
+        proof = tuple(all_proofs)[0]
+
+        print('\n')
+        print(proofs_by_colordef)
+        print('\n')
+
+        import pdb
+        import json
+        pdb.set_trace()
+
 
     @define_action
     def addtx(hex_tx):

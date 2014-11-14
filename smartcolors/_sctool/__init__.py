@@ -59,13 +59,13 @@ def main(argv, parser=None):
 
     args.verbosity = args.verbose - args.quiet
 
-    if args.verbosity == 0:
+    if args.verbosity == 1:
         logging.root.setLevel(logging.INFO)
-    elif args.verbosity > 1:
+    elif args.verbosity >= 2:
         logging.root.setLevel(logging.DEBUG)
-    elif args.verbosity == -1:
+    elif args.verbosity == 0:
         logging.root.setLevel(logging.WARNING)
-    elif args.verbosity < -2:
+    elif args.verbosity <= -1:
         logging.root.setLevel(logging.ERROR)
 
 

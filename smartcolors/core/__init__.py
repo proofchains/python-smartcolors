@@ -358,7 +358,7 @@ class ColorProof(proofmarshal.ImmutableProof):
     def _ctx_deserialize(self, ctx):
         version = ctx.read_varuint('version')
         if version != self.VERSION:
-            raise SerializationError('wrong version: got %d; expected %d' % (version, self.VERSION))
+            raise Exception('wrong version: got %d; expected %d' % (version, self.VERSION))
 
         colordef = ctx.read_obj('colordef', ColorDef)
         object.__setattr__(self, 'colordef', colordef)
@@ -444,7 +444,7 @@ class GenesisScriptPubKeyColorProof(ColorProof):
 
     def _ctx_deserialize(self, ctx):
         super()._ctx_deserialize(ctx)
-        n = ctx.read_varuint('n', self.n)
+        n = ctx.read_varuint('n')
         object.__setattr__(self, 'n', n)
         tx = ctx.read_obj('tx', CTransactionSerializer)
         object.__setattr__(self, 'tx', tx)

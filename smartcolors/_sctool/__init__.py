@@ -65,6 +65,10 @@ def make_arg_parser():
     smartcolors._sctool.cmds_colordef.cmd_definecolor(subparsers)
     smartcolors._sctool.cmds_colordef.cmd_decodecolordef(subparsers)
 
+    import smartcolors._sctool.cmds_colorproof
+    smartcolors._sctool.cmds_colorproof.cmd_prove(subparsers)
+    smartcolors._sctool.cmds_colorproof.cmd_decodeproof(subparsers)
+
     return parser
 
 

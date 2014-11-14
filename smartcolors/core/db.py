@@ -49,7 +49,7 @@ class ColorProofDb:
         assert not colordef.is_pruned()
 
         if colordef in self.colordefs:
-            raise ValueError('colordef already in database')
+            return # already added, so we can stop now
 
         self.colordefs.add(colordef)
 
@@ -78,6 +78,19 @@ class ColorProofDb:
             assert colordef not in scriptPubKey_colordef_set
             scriptPubKey_colordef_set.add(colordef)
 
+    def addcolorproof(self, colorproof):
+        """Add a color proof to the database"""
+        self.addcolordef(colorproof.colordef)
+
+        if isinstance(colorproof, TransferredColorProof):
+            # Add prevout proofs recursively first
+            for prevout_proof in colorproof.prevout_proofs.values():
+                self.addcolorproof(prevout_proof)
+
+        self.colored_outpoints \
+                .setdefault(colorproof.outpoint, {}) \
+                .setdefault(colorproof.colordef, set()) \
+                .add(colorproof)
 
     def addtx(self, tx):
         """Add a transaction to the database"""

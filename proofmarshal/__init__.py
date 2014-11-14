@@ -325,6 +325,15 @@ class ImmutableProof:
             object.__setattr__(self, '_cached_hash', self.calc_hash())
             return self._cached_hash
 
+    def __hash__(self):
+        return hash(self.hash)
+
+    def __eq__(self, other):
+        if isinstance(other, ImmutableProof):
+            return self.hash == other.hash
+        else:
+            return False
+
     def __repr__(self):
         # FIXME: better way to get a fully qualified name?
         return '%s.%s(<%s>)' % (self.__class__.__module__, self.__class__.__qualname__,

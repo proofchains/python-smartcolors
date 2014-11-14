@@ -144,3 +144,33 @@ class Test_HashSerializationContext(unittest.TestCase):
 
             actual_hash = boxed_objs(expected_buf, expected_i).hash
             self.assertEqual(b2x(expected_hash), b2x(actual_hash))
+
+class Test_ImmutableProof(unittest.TestCase):
+    def test___hash__(self):
+        """__hash__() special method"""
+
+        b1 = boxed_objs(b'', 0)
+        b2 = boxed_objs(b'', 0)
+
+        self.assertEqual(hash(b1), hash(b2))
+
+        b3 = boxed_objs(b'', 1)
+        self.assertNotEqual(hash(b1), hash(b3))
+
+        s = set((b1, b2))
+        self.assertIn(b1, s)
+        self.assertIn(b2, s)
+        self.assertNotIn(b3, s)
+
+        s.add(b3)
+        self.assertIn(b3, s)
+
+    def test_equality(self):
+        """Equality comparisons"""
+        b1 = boxed_objs(b'', 0)
+        b2 = boxed_objs(b'', 0)
+
+        self.assertEqual(b1, b2)
+
+        b3 = boxed_objs(b'', 1)
+        self.assertNotEqual(b1, b3)

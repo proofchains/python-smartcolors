@@ -17,6 +17,25 @@ import logging
 import bitcoin.core
 import bitcoin.rpc
 
+class ParseCOutPointArg(argparse.Action):
+    @staticmethod
+    def str_to_COutPoint(str_outpoint, parser):
+        try:
+            if str_outpoint.count(':') != 1:
+                raise ValueError
+            str_txid, str_n = str_outpoint.split(':')
+
+            txid = bitcoin.core.lx(str_txid)
+            n = int(str_n)
+            return bitcoin.core.COutPoint(txid, n)
+        except ValueError as exp:
+            parser.exit('Bad outpoint %r: %s' % (str_outpoint, exp))
+
+    def __call__(self, parser, args, values, option_string=None):
+
+        values = self.str_to_COutPoint(values, parser)
+        setattr(args, self.dest, values)
+
 def make_arg_parser():
     # Global arguments
 
@@ -54,6 +73,7 @@ def main(argv, parser=None):
         parser = make_arg_parser()
 
     args = parser.parse_args()
+    args.parser = parser
 
     # Setup logging
 

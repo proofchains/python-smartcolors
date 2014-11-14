@@ -22,6 +22,7 @@ from bitcoin.core.script import *
 from bitcoin.wallet import CBitcoinAddress
 
 from smartcolors.core import *
+from smartcolors._sctool import ParseCOutPointArg
 
 class cmd_definecolor:
     def __init__(self, subparsers):
@@ -61,19 +62,12 @@ class cmd_definecolor:
         genesis_outpoints = {}
         genesis_scriptPubKeys = set()
 
-        for str_txid_n, str_qty in args.genesis_outpoints:
-            if str_txid_n.count(':') != 1:
-                raise Exception('bad txid:n')
-
-            str_txid, str_n = str_txid_n.split(':')
-            txid = lx(str_txid)
-            n = int(str_n)
+        for str_outpoint, str_qty in args.genesis_outpoints:
+            outpoint = ParseCOutPointArg.str_to_COutPoint(str_outpoint, args.parser)
             qty = int(str_qty)
 
-            outpoint = COutPoint(txid, n)
-
             if outpoint in genesis_outpoints:
-                raise Exception('dup outpoint')
+                args.parser.exit('dup outpoint %r' % outpoint)
 
             logging.debug('Genesis outpoint: %s:%d %d' % (b2lx(outpoint.hash), outpoint.n, qty))
             genesis_outpoints[outpoint] = qty
@@ -83,7 +77,7 @@ class cmd_definecolor:
 
             scriptPubKey = addr.to_scriptPubKey()
             if scriptPubKey in genesis_scriptPubKeys:
-                raise Exception('dup addr')
+                args.parser.exit('dup addr %s' % str_addr)
 
             logging.debug('Genesis scriptPubKey: %s (%s)' % (b2x(scriptPubKey), str(addr)))
             genesis_scriptPubKeys.add(scriptPubKey)
@@ -92,7 +86,7 @@ class cmd_definecolor:
             scriptPubKey = CScript(x(hex_scriptPubKey))
 
             if scriptPubKey in genesis_scriptPubKeys:
-                raise Exception('dup scriptPubKey')
+                args.parser.exit('dup addr %s' % hex_scriptPubKey)
 
             logging.debug('Genesis scriptPubKey: %s' % b2x(scriptPubKey))
             genesis_scriptPubKeys.add(scriptPubKey)

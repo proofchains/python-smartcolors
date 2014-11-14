@@ -19,6 +19,7 @@ from bitcoin.core import *
 from smartcolors.core import *
 from smartcolors.core.db import ColorProofDb
 from smartcolors._sctool import ParseCOutPointArg
+from smartcolors.io import ColorDefFileSerializer, ColorProofFileSerializer
 
 class cmd_prove:
     def __init__(self, subparsers):
@@ -46,6 +47,13 @@ class cmd_prove:
                 dest='txids',
                 help='Transaction txid to add to the proof')
 
+        parser.add_argument('--hextx', metavar='HEX',
+                type=str,
+                action='append',
+                default=[],
+                dest='hex_txs',
+                help='Hex-encoded tx')
+
         parser.add_argument('outpoint', metavar='TXID:N',
                 action=ParseCOutPointArg,
                 help='Transaction outpoint')
@@ -64,7 +72,7 @@ class cmd_prove:
         db = ColorProofDb()
 
         for proof_fd in args.colorproof_fds:
-            proof = ColorProof.stream_deserialize(proof_fd)
+            proof = ColorProofFileSerializer.stream_deserialize(proof_fd)
 
             if colordef is not None:
                 if proof.colordef != colordef:
@@ -76,7 +84,7 @@ class cmd_prove:
             logging.info('Loaded proof: %r' % proof)
 
         if args.colordef_fd is not None:
-            colordef = ColorDef.stream_deserialize(args.colordef_fd)
+            colordef = ColorDefFileSerializer.stream_deserialize(args.colordef_fd)
             db.addcolordef(colordef)
 
             logging.info('Loaded colordef: %r' % colordef)
@@ -95,10 +103,16 @@ class cmd_prove:
             try:
                 tx = args.proxy.getrawtransaction(txid)
             except IndexError as exp:
-                args.parser.exit("Failed to get tx: %s" % exp)
+                logging.warning("Failed to get tx: %s" % exp)
+                continue
 
             db.addtx(tx)
             logging.debug('Added tx to the proof db: %s' % b2lx(tx.GetHash()))
+
+        for hex_tx in args.hex_txs:
+            serialized_tx = x(hex_tx)
+            tx = CTransaction.deserialize(serialized_tx)
+            db.addtx(tx)
 
         if args.outpoint not in db.colored_outpoints:
             args.parser.exit("Failed to prove output is colored")
@@ -107,18 +121,19 @@ class cmd_prove:
         assert len(outpoint_proofs_by_colordef.keys()) == 1
         outpoint_proof_set = tuple(outpoint_proofs_by_colordef.values())[0]
 
-
         assert len(outpoint_proof_set) == 1 # FIXME: pick best proof
         proof = outpoint_proof_set.pop()
 
         assert proof.outpoint == args.outpoint
+
+        logging.info('Success! Qty: %d' % proof.qty)
 
         if args.outpoint_proof_fd is None:
             proof_file_name = '%s:%d.scproof' % (b2lx(args.outpoint.hash), args.outpoint.n)
             args.outpoint_proof_fd = open(proof_file_name, 'xb')
             logging.info('Created proof file %s based on outpoint' % proof_file_name)
 
-        proof.stream_serialize(args.outpoint_proof_fd)
+        ColorProofFileSerializer.stream_serialize(proof, args.outpoint_proof_fd)
         args.outpoint_proof_fd.close()
 
 class cmd_decodeproof:
@@ -131,11 +146,12 @@ class cmd_decodeproof:
         parser.set_defaults(cmd_func=self.do)
 
     def do(self, args):
-        proof = ColorProof.stream_deserialize(args.fd)
+        proof = ColorProofFileSerializer.stream_deserialize(args.fd)
 
         print('Proof class: %s' % proof.__class__.__name__)
         print('Colordef: %s' % b2x(proof.colordef.hash))
         print('Outpoint: %s:%d' % (b2lx(proof.outpoint.hash), proof.outpoint.n))
+        print('Qty: %d' % proof.qty)
 
         if isinstance(proof, GenesisOutPointColorProof):
             pass # nothing more to do

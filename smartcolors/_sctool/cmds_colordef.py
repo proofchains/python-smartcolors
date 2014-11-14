@@ -23,6 +23,7 @@ from bitcoin.wallet import CBitcoinAddress
 
 from smartcolors.core import *
 from smartcolors._sctool import ParseCOutPointArg
+from smartcolors.io import ColorDefFileSerializer
 
 class cmd_definecolor:
     def __init__(self, subparsers):
@@ -100,7 +101,7 @@ class cmd_definecolor:
                             birthdate_blockheight=args.birthdate_blockheight,
                             stegkey=stegkey)
 
-        colordef.stream_serialize(args.fd)
+        ColorDefFileSerializer.stream_serialize(colordef, args.fd)
 
 class cmd_decodecolordef:
     def __init__(self, subparsers):
@@ -111,7 +112,7 @@ class cmd_decodecolordef:
         parser.set_defaults(cmd_func=self.do)
 
     def do(self, args):
-        colordef = ColorDef.stream_deserialize(args.fd)
+        colordef = ColorDefFileSerializer.stream_deserialize(args.fd)
 
         print('ColorDef Hash: %s' % b2x(colordef.hash))
         print('VERSION: %d' % colordef.VERSION)

@@ -321,6 +321,7 @@ class Test_GenesisOutPointColorProof(unittest.TestCase):
         expected_hash = h(x('01') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
+                          x('80e497d012') + # color quantity, 5,000,000,000
                           COutPointSerializer.calc_hash(genesis_outpoint))
 
         self.assertEqual(b2x(expected_hash), b2x(colorproof.hash))
@@ -357,6 +358,7 @@ class Test_GenesisScriptPubKeyColorProof(unittest.TestCase):
         expected_hash = h(x('02') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
+                          x('80f28ba809') + # color quantity, 2,500,000,000
                           x('00') + # n
                           CTransactionSerializer.calc_hash(tx))
 
@@ -462,6 +464,7 @@ class Test_TransferredColorProof(unittest.TestCase):
         expected_hash = h(x('03') + # ColorProof type
                           x('01') + # version
                           colordef.hash +
+                          x('01') + # color quantity, 1
                           x('00') + # n
                           CTransactionSerializer.calc_hash(tx) +
                           colorproof.prevout_proofs.hash)

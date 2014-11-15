@@ -355,6 +355,9 @@ class ColorProof(proofmarshal.ImmutableProof):
         ctx.write_varuint('version', self.VERSION)
         ctx.write_obj('colordef', self.colordef)
 
+        if isinstance(ctx, proofmarshal.HashSerializationContext):
+            ctx.write_varuint('qty', self.qty)
+
     def _ctx_deserialize(self, ctx):
         version = ctx.read_varuint('version')
         if version != self.VERSION:

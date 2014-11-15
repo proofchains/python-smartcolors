@@ -68,6 +68,8 @@ def make_arg_parser():
     import smartcolors._sctool.cmds_colorproof
     smartcolors._sctool.cmds_colorproof.cmd_prove(subparsers)
     smartcolors._sctool.cmds_colorproof.cmd_decodeproof(subparsers)
+    smartcolors._sctool.cmds_colorproof.cmd_rewriteproof(subparsers)
+    smartcolors._sctool.cmds_colorproof.cmd_validateproof(subparsers)
 
     return parser
 

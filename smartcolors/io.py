@@ -9,6 +9,9 @@
 # propagated, or distributed except according to the terms contained in the
 # LICENSE file.
 
+import logging
+
+import bitcoin.core
 import proofmarshal.memoize
 import smartcolors.core
 
@@ -35,7 +38,7 @@ class FileSerializer:
         fd.write(obj.hash)
 
     @classmethod
-    def stream_deserialize(cls, fd):
+    def stream_deserialize(cls, fd, check_hash=True):
         assert len(cls.MAGIC) == 32
         actual_magic = fd.read(len(cls.MAGIC))
         assert cls.MAGIC == actual_magic # FIXME: raise an exception here...
@@ -47,7 +50,15 @@ class FileSerializer:
         obj = ctx.read_obj(None, cls.OBJ_CLASS)
 
         expected_hash = fd.read(32)
-        assert obj.hash == expected_hash
+        if obj.hash != expected_hash:
+            # FIXME: probably better ways to do this...
+            msg = 'deserialized obj hash != expected hash: %s != %s' % \
+                        (bitcoin.core.b2x(obj.hash), bitcoin.core.b2x(expected_hash))
+
+            if check_hash:
+                raise Exception(msg)
+            else:
+                logging.warning(msg)
 
         return obj
 

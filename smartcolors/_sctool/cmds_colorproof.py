@@ -165,3 +165,33 @@ class cmd_decodeproof:
 
         else:
             assert False
+
+class cmd_rewriteproof:
+    def __init__(self, subparsers):
+        parser = subparsers.add_parser('rewriteproof',
+                    help='Rewrite a color proof (inplace)')
+        parser.add_argument('fd', metavar='FILE',
+                type=argparse.FileType('rb+'),
+                help='Color proof file')
+        parser.set_defaults(cmd_func=self.do)
+
+    def do(self, args):
+        proof = ColorProofFileSerializer.stream_deserialize(args.fd, check_hash=False)
+        args.fd.seek(0)
+        args.fd.truncate()
+        ColorProofFileSerializer.stream_serialize(proof, args.fd)
+        args.fd.flush()
+
+
+class cmd_validateproof:
+    def __init__(self, subparsers):
+        parser = subparsers.add_parser('validateproof',
+                    help='Validate a color proof')
+        parser.add_argument('fd', metavar='FILE',
+                type=argparse.FileType('rb'),
+                help='Color proof file')
+        parser.set_defaults(cmd_func=self.do)
+
+    def do(self, args):
+        proof = ColorProofFileSerializer.stream_deserialize(args.fd)
+        proof.validate()

@@ -53,6 +53,26 @@ class cmd_db_addtx:
         tx = args.proxy.getrawtransaction(args.txid)
         args.colordb.addtx(tx)
 
+class cmd_db_scan:
+    def __init__(self, subparsers):
+        parser = subparsers.add_parser('scan',
+                    help='Scan the blockchain for colored transactions')
+        parser.add_argument('height', type=int,
+            help='Starting height')
+        parser.set_defaults(cmd_func=self.do)
+
+    def do(self, args):
+        cur_height = args.height
+        while cur_height <= args.proxy.getblockcount():
+            blk_hash = args.proxy.getblockhash(cur_height)
+            blk = args.proxy.getblock(blk_hash)
+            logging.debug('Blk: %d %s' % (cur_height, b2lx(blk_hash)))
+
+            for tx in blk.vtx:
+                args.colordb.addtx(tx)
+
+            cur_height += 1
+
 class cmd_db_statehash:
     def __init__(self, subparsers):
         parser = subparsers.add_parser('statehash',
@@ -71,4 +91,5 @@ def add_db_cmds(subparsers):
 
     cmd_db_addcolordef(db_subparsers)
     cmd_db_addtx(db_subparsers)
+    cmd_db_scan(db_subparsers)
     cmd_db_statehash(db_subparsers)

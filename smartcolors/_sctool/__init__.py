@@ -13,9 +13,12 @@ SCTOOL_VERSION = '0.1.0'
 
 import argparse
 import logging
+import os
 
 import bitcoin.core
 import bitcoin.rpc
+
+import smartcolors.db
 
 class ParseCOutPointArg(argparse.Action):
     @staticmethod
@@ -47,8 +50,11 @@ def make_arg_parser():
     network_arg_group.add_argument("-r","--regtest",action='store_true',
                                    help="Use regtest instead of mainnet")
 
-    parser.add_argument("-d","--datadir",type=str,default='~/.smartcolors',
-                                 help="Data directory")
+    parser.add_argument("-d","--datadir",
+                        type=str,
+                        default='~/.smartcolors',
+                        dest='datadir',
+                        help="Data directory")
     parser.add_argument("--fee-per-kb",type=float,default=0.0001,
                                  help="Fee-per-kb to use")
     parser.add_argument("--dust",type=float,default=0.0001,
@@ -70,6 +76,9 @@ def make_arg_parser():
     smartcolors._sctool.cmds_colorproof.cmd_decodeproof(subparsers)
     smartcolors._sctool.cmds_colorproof.cmd_rewriteproof(subparsers)
     smartcolors._sctool.cmds_colorproof.cmd_validateproof(subparsers)
+
+    import smartcolors._sctool.cmds_db
+    smartcolors._sctool.cmds_db.add_db_cmds(subparsers)
 
     return parser
 
@@ -98,13 +107,16 @@ def main(argv, parser=None):
     # Set Bitcoin network globally
 
     assert not (args.regtest and args.testnet)
+    network = ''
     if args.testnet:
         logging.debug('Using testnet')
         bitcoin.SelectParams('testnet')
+        network = 'testnet'
 
     elif args.regtest:
         logging.debug('Using regtest')
         bitcoin.SelectParams('regtest')
+        network = 'regtest'
 
 
     args.fee_per_kb = int(args.fee_per_kb * bitcoin.core.COIN)
@@ -112,6 +124,12 @@ def main(argv, parser=None):
 
     args.dust = int(args.dust * bitcoin.core.COIN)
     logging.debug('Dust threshold: %d satoshis' % args.dust)
+
+    args.datadir = os.path.expanduser(args.datadir)
+
+    colordb_path = os.path.join(args.datadir, network, 'colordb')
+    logging.debug('Colordb path: %s' % colordb_path)
+    args.colordb = smartcolors.db.PersistentColorProofDb(colordb_path)
 
     args.proxy = bitcoin.rpc.Proxy()
 

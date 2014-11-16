@@ -66,7 +66,7 @@ class cmd_db_scan:
         while cur_height <= args.proxy.getblockcount():
             blk_hash = args.proxy.getblockhash(cur_height)
             blk = args.proxy.getblock(blk_hash)
-            logging.debug('Blk: %d %s' % (cur_height, b2lx(blk_hash)))
+            logging.info('Blk: %d %s' % (cur_height, b2lx(blk_hash)))
 
             for tx in blk.vtx:
                 args.colordb.addtx(tx)

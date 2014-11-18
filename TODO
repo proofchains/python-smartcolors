@@ -21,3 +21,9 @@ all!)
 Should proofmarshal save transaction/coutpoint/etc hashes by XORing them
 instead of doing a new hash function? Should provide the same security against
 replacement, and let the original hash be recovered.
+
+
+Need to think through scriptPubKey genesis more; probably want it to use a
+special nSequence that simply defines the outputs as colored, rather than
+making the scriptPubKey output itself be colored. Do an actual atomic proof
+shortening implementation.

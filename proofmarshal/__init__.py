@@ -61,6 +61,12 @@ class StreamSerializationContext(SerializationContext):
         self.fd = fd
 
     def write_varuint(self, attr_name, value):
+        if not isinstance(value, int):
+            raise TypeError('expected value to be int instance; got %r' % \
+                                value.__class__)
+        if value < 0:
+            raise ValueError('value must be non-negative; got %r' % value)
+
         # unsigned little-endian base128 format (LEB128)
         if value == 0:
             self.fd.write(b'\x00')
@@ -76,11 +82,16 @@ class StreamSerializationContext(SerializationContext):
                 value >>= 7
 
     def write_bytes(self, attr_name, value, expected_length=None):
+        if not isinstance(value, bytes):
+            raise TypeError('expected value to be bytes instance; got %r' % value.__class__)
+
         if expected_length is None:
             self.write_varuint(None, len(value))
+
         else:
-            # FIXME: proper exception
-            assert len(value) == expected_length
+            if len(value) != expected_length:
+                raise ValueError('value length does not match expected length; got %d; expected %d' % \
+                                    (len(value), expected_length))
         self.fd.write(value)
 
     def write_obj(self, attr_name, value, serialization_class=None):
@@ -140,11 +151,13 @@ class JsonSerializationContext:
         self.pairs = {}
 
     def write_varuint(self, attr_name, value):
-        assert attr_name not in self.pairs
+        if attr_name in self.pairs:
+            raise ValueError('duplicate attribute name: %r' % attr_name)
         self.pairs[attr_name] = value
 
     def write_bytes(self, attr_name, value, expected_length=None):
-        assert attr_name not in self.pairs
+        if attr_name in self.pairs:
+            raise ValueError('duplicate attribute name: %r' % attr_name)
         hex_value = binascii.hexlify(value).decode('utf8')
         self.pairs[attr_name] = hex_value
 
@@ -175,12 +188,16 @@ class HashSerializationContext(BytesSerializationContext):
     """
 
     def write_bytes(self, attr_name, value, expected_length=None):
+        if not isinstance(value, bytes):
+            raise TypeError('expected value to be bytes instance; got %r' % value.__class__)
+
         # FIXME: should we write the bytes themselves, or the hash of the bytes?
         if expected_length is None:
             self.write_varuint(None, len(value))
         else:
-            # FIXME: proper exception
-            assert len(value) == expected_length
+            if len(value) != expected_length:
+                raise ValueError('value length does not match expected length; got %d; expected %d' % \
+                                    (len(value), expected_length))
         self.fd.write(value)
 
     def write_obj(self, attr_name, value, serialization_class=None):

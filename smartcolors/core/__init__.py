@@ -165,7 +165,12 @@ class ColorDef(proofmarshal.ImmutableProof):
 
         if stegkey is None:
             stegkey = os.urandom(self.STEGKEY_LEN)
-        assert len(stegkey) == self.STEGKEY_LEN
+
+        if not isinstance(stegkey, bytes):
+            raise TypeError('expected bytes for stegkey; got %r' % stegkey.__class__)
+        if len(stegkey) != self.STEGKEY_LEN:
+            raise ValueError('stegkey is wrong length; got %d bytes; expected %d' % \
+                                (len(stegkey), self.STEGKEY_LEN))
 
         # FIXME: should be a merbinner tree
         if genesis_outpoints is None:

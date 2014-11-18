@@ -20,6 +20,15 @@ Provides serialization and deserialization for complex, immutable,
 cryptographic proofs.
 """
 
+class ProofmarshalError:
+    """Base class for all proofmarshal-related errors"""
+
+class DeserializationError(ProofmarshalError):
+    """Error during deserialization"""
+
+class DataTruncatedError(DeserializationError):
+    """Truncated data encountered while deserializing"""
+
 class SerializationContext:
     """Context for serialization
 
@@ -105,7 +114,9 @@ class StreamDeserializationContext(DeserializationContext):
 
     def fd_read(self, l):
         r = self.fd.read(l)
-        assert len(r) == l # FIXME: raise exception
+        if len(r) != l:
+            raise DataTruncatedError('Tried to read %d bytes but only read %d bytes' % \
+                                        (l, len(r)))
         return r
 
     def read_varuint(self, attr_name):

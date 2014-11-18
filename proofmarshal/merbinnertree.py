@@ -121,6 +121,6 @@ class MerbinnerTree(proofmarshal.ImmutableProof, dict):
                 recurse() # right
 
             else:
-                raise Exception('unsupported node type: %d' % node_type)
+                raise proofmarshal.DeserializationError('unsupported merbinnertree node type: %d' % node_type)
 
         recurse()

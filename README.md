@@ -4,7 +4,7 @@ python-smartcolors
 Requirements
 ============
 
-python-bitcoinlib v0.2.1
+python-bitcoinlib v0.3.0
 
 
 ELI5 Overview

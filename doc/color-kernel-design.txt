@@ -1,0 +1,219 @@
+Smartcolors Design
+==================
+
+
+Motivating use cases
+====================
+
+* Ivan the Gold issuer story
+
+key point: Ivan is in the business of issuing bearer bonds; not interested in
+other things.
+
+
+* On-chain story
+
+key point: minimal trust - you only trust Ivan to meet his underlying asset
+           obligations, not to be technically competent otherwise
+
+
+* Auditing reserves
+
+Not a tech story, but background: "meatspace" auditor Trudy audits Ivan's
+actual gold holdings and makes a publicly verifiable statement.
+
+
+* Digital auditing issuances
+
+Alice the gold owner wants to be sure her gold tokens are a part of the gold
+claimed by Ivan/audited by auditor Trudy.
+
+
+* Atomic swap
+
+need to be able to trade Ivan's gold for btc/other assets securely; either transfer happens or it does not happen
+
+
+* Exchange story
+
+As above, but we also want to turn this into a bid/ask exchange
+
+
+* Redemption story
+
+Alice securely redeems funds back to Ivan
+
+
+* Redemption fraud story
+
+Ivan denies that Alice ever redeemed; Alice wants to prove otherwise
+
+
+* Mobile wallet
+
+tl;dr: Efficiency matters.
+
+
+
+* Recovering from a compromise
+
+Ivan screws up and his private keys are leaked. How do we deal with this?
+(manual process!)
+
+
+* Destroy an asset with an update
+
+Subset of above? Do we allow this to be routine, or create a system where the
+design forces you to do things fully "manually" with client buyin? Latter is
+attractive from the perspective of forcing issuers to be honest.
+
+Note how "destroy an asset with an update" means keeping up-to-date w/
+colordefs is extremely important; problematic in many ways.
+
+
+Terminology
+===========
+
+Color Definition - Low-level consensus critical color definition
+
+Quantity - Abstract amount of color
+
+Transaction Kernel - The transaction-level way that we decide what input color
+                     maps to what output color.
+
+
+Advanced Stories
+================
+
+Stand-alone section as this is an outcome of design decisions meant to meet the needs
+of the driving stories.
+
+* Color definition update that creates/removes assets
+
+* Proof-shortening/color definition update
+
+Note how these *are* separate stories; can we distinguish between the two? Role
+separation between those authorised to shorten proofs and those authorised to
+issue/destroy assets?
+
+
+* Day-to-day proof-updating process
+
+What's this look like exactly?
+
+
+* Recovering from a bad update
+
+Many colordef schemes create scenarios where a bad update can put issuer in an
+unrecoverable position, e.g. disable future updates. Likely this is the same
+story as recovering from a compromise.
+
+
+
+Design Criteria
+===============
+
+We also have some design criteria implied by the above stories:
+
+* Cost
+
+Minimize per-tx cost; minimize BTC carrying cost
+
+Dust-limit
+
+
+* Censorship resistance
+
+Don't want easy way to censor all Smartcolor transactions
+
+Want options to robustly prohibit censorship 100% if needed in future
+
+Note relationship of censorship to cost - weak censorship is a cost driver
+
+
+
+Color definitions
+=================
+
+Big picture: these look like blockchains, with the peculularity that the
+information required to reconstruct some/all of the definition is available
+from another blockchain, e.g. Bitcoin.
+
+
+
+
+Transactions
+============
+
+Within a color definition we have color transactions, which move or create
+color; genesis transactions create it from scratch; movement transactions move
+it.
+
+Need to further separate movement into destroying color and recreating it;
+destruction is always allowed. Recreation is only valid if the way it was
+recreated is understood by the client.
+
+Key thing with trusting that a transaction is valid is determining if
+double-spends were prevented: Bitcoin-based color transactions naturally do
+this through the underlying blockchain. Other color transactions need other
+ways of handling this.
+
+
+Kernel
+======
+
+The big picture of all this is color transactions are processed according to a
+state machine that determines if they're valid or not; only certain transitions
+in that state machine are allowed.
+
+
+Kernels
+=======
+
+The color kernels are how Smartcolors transfers color from transaction inputs
+to outputs, or more specifically, how we encode those transfers within standard
+Bitcoin transactions.
+
+
+nSequence
+
+
+Design Criteria
+===============
+
+* Multi-party transactions
+
+* SIGHASH_SINGLE atomic transactions
+
+* Divisibility
+
+* Censorship
+
+* 
+
+
+Use-cases
+
+
+
+
+
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          Source Port          |       Destination Port        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Sequence Number                        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Acknowledgment Number                      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |  Data |           |U|A|P|R|S|F|                               |
+   | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
+   |       |           |G|K|H|T|N|N|                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |           Checksum            |         Urgent Pointer        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Options                    |    Padding    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                             data                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+

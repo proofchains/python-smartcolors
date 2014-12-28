@@ -464,10 +464,10 @@ class GenesisScriptPubKeyColorProof(ColorProof):
         return remove_msbdrop_value_padding(self.tx.vout[self.outpoint.n].nValue)
 
     def _validate(self):
-        if self.tx.GetHash() != self.outpoint.hash or not (0 <= self.outpoint.n < len(self.tx.vout)):
+        if not (0 <= self.n < len(self.tx.vout)):
             raise ColorProofValidationError('outpoint does not match transaction')
 
-        if self.tx.vout[self.outpoint.n].scriptPubKey not in self.colordef.genesis_scriptPubKeys:
+        if self.tx.vout[self.n].scriptPubKey not in self.colordef.genesis_scriptPubKeys:
             raise ColorProofValidationError('scriptPubKey not a genesis scriptPubKey')
 
         return ()
@@ -553,8 +553,8 @@ class TransferredColorProof(ColorProof):
     def _validate(self):
         yield from self.prevout_proofs.values()
 
-        if self.tx.GetHash() != self.outpoint.hash:
-            raise ColorProofValidationError('outpoint does not match transaction; wrong txid')
+        if not (0 <= self.n < len(self.tx.vout)):
+            raise ColorProofValidationError('outpoint does not match transaction')
 
         self.calc_qty()
 
